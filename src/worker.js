@@ -3,7 +3,9 @@ const E621_TAG_AUTOCOMPLETE_API = 'https://e621.net/tags/autocomplete.json';
 const USER_AGENT = 'e621reels/0.1.0 (Cloudflare Worker demo; contact: admin@example.com)';
 const PAGE_SIZE = 24;
 const BASE_TAGS = ['animated'];
-const SUPPORTED_MEDIA = new Set(['webm', 'mp4', 'gif']);
+const VIDEO_MEDIA = new Set(['webm', 'mp4', 'gif']);
+const IMAGE_MEDIA = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const SUPPORTED_MEDIA = new Set([...VIDEO_MEDIA, ...IMAGE_MEDIA]);
 const UPSTREAM_ERROR_PREVIEW_LIMIT = 400;
 const TAG_AUTOCOMPLETE_LIMIT = 8;
 const RATIO_FILTER_TAGS = {
@@ -41,6 +43,24 @@ export default {
       });
     }
 
+    if (url.pathname === '/photos') {
+      return new Response(renderPhotoGridPage(url), {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
+    if (url.pathname === '/about') {
+      return new Response(renderAboutPage(), {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(renderApp(url), {
         headers: {
@@ -64,9 +84,10 @@ async function handlePosts(request, url) {
   const rawTags = sanitizeTags(url.searchParams.get('tags') || '');
   const requestedRating = sanitizeRating(url.searchParams.get('rating'));
   const requestedRatio = sanitizeRatioFilter(url.searchParams.get('ratio'));
+  const mediaMode = url.searchParams.get('media') === 'image' ? 'image' : 'reel';
   const apiTags = [
     mode === 'score' ? 'order:score' : 'order:rank',
-    ...BASE_TAGS,
+    ...(mediaMode === 'reel' ? BASE_TAGS : []),
     ...rawTags,
     ...(requestedRating ? ['rating:' + requestedRating] : []),
     ...(requestedRatio ? [RATIO_FILTER_TAGS[requestedRatio]] : []),
@@ -124,7 +145,11 @@ async function handlePosts(request, url) {
     const data = await response.json();
     const posts = Array.isArray(data.posts)
       ? data.posts
-          .filter((post) => post?.file?.url && SUPPORTED_MEDIA.has(String(post.file.ext || '').toLowerCase()))
+          .filter((post) => {
+            const ext = String(post?.file?.ext || '').toLowerCase();
+            if (!post?.file?.url || !SUPPORTED_MEDIA.has(ext)) return false;
+            return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
+          })
           .map((post) => mapPost(post))
       : [];
 
@@ -260,7 +285,7 @@ function mapPost(post) {
   return {
     id: post.id,
     ext,
-    type: ['webm', 'mp4'].includes(ext) ? 'video' : 'image',
+    type: VIDEO_MEDIA.has(ext) ? 'video' : 'image',
     score: post.score?.total || 0,
     rating: post.rating || 'u',
     width,
@@ -753,6 +778,32 @@ function renderApp(url) {
         white-space: nowrap;
         border: 0;
       }
+      .nav-toggle {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 9;
+      }
+      .burger-menu {
+        position: absolute;
+        top: 58px;
+        left: 14px;
+        z-index: 9;
+        border: 1px solid var(--outline);
+        background: var(--panel-strong);
+        border-radius: 14px;
+        padding: 8px;
+        min-width: 180px;
+        display: none;
+      }
+      .burger-menu.open { display: grid; gap: 6px; }
+      .burger-menu a {
+        color: var(--text);
+        text-decoration: none;
+        padding: 8px 10px;
+        border-radius: 10px;
+      }
+      .burger-menu a:hover { background: rgba(255,255,255,0.08); }
       @media (orientation: landscape) and (max-width: 960px) {
         .shell {
           padding: 0;
@@ -790,6 +841,12 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
+        <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+        <nav class="burger-menu" id="burgerMenu">
+          <a href="/">Reels feed</a>
+          <a href="/photos">Photos grid</a>
+          <a href="/about">About</a>
+        </nav>
         <div class="progress"><div id="progressBar"></div></div>
         <div class="viewport" id="viewport">
           <div class="reel-track" id="reelTrack"></div>
@@ -993,6 +1050,8 @@ function renderApp(url) {
       const hideTagsToggle = document.getElementById('hideTagsToggle');
       const tagAutocomplete = document.getElementById('tagAutocomplete');
       const tagAutocompleteList = document.getElementById('tagAutocompleteList');
+      const navToggleButton = document.getElementById('navToggleButton');
+      const burgerMenu = document.getElementById('burgerMenu');
 
       modeSelect.value = state.mode;
       tagsInput.value = state.tags;
@@ -1000,6 +1059,11 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
+
+      navToggleButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        burgerMenu.classList.toggle('open');
+      });
 
       toggleFiltersButton.addEventListener('click', () => {
         const nextOpen = !filterPanel.classList.contains('open');
@@ -1094,6 +1158,9 @@ function renderApp(url) {
       document.addEventListener('click', (event) => {
         if (!filterPanel.contains(event.target) && !toggleFiltersButton.contains(event.target)) {
           closeSettings();
+        }
+        if (!burgerMenu.contains(event.target) && !navToggleButton.contains(event.target)) {
+          burgerMenu.classList.remove('open');
         }
         if (!filterPanel.contains(event.target)) {
           closeTagAutocomplete();
@@ -2172,6 +2239,19 @@ function renderApp(url) {
     </script>
   </body>
 </html>`;
+}
+
+function renderPhotoGridPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1}.tile img{width:100%;height:100%;object-fit:cover;display:block}</style></head>
+  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/">Reels feed</a><a href="/photos">Photos grid</a><a href="/about">About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
+  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));
+  let page=1,loading=false;async function load(){if(loading)return;loading=true;const res=await fetch('/api/posts?media=image&page='+page);const data=await res.json();(data.posts||[]).forEach((p)=>{const t=document.createElement('article');t.className='tile';const i=document.createElement('img');i.loading='lazy';i.src=p.previewUrl||p.mediaUrl;i.alt='e621 image '+p.id;t.appendChild(i);grid.appendChild(t)});page++;loading=false}
+  const io=new IntersectionObserver((e)=>{if(e[0].isIntersecting)load()},{rootMargin:'800px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);load();</script></body></html>`;
+}
+
+function renderAboutPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}a{color:#ff73af}.card{max-width:760px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}</style></head><body><div class="card"><p><a href="/">← Back to Reels</a></p><h1>About this app</h1><p>e621 Reels is a swipe-first viewer for animated posts and a dedicated infinite photo grid page.</p><p>Use the burger menu on each page to switch between Reels, Photos, and this About page.</p></div></body></html>`;
 }
 
 
