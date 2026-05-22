@@ -519,7 +519,7 @@ function renderApp(url) {
         inset: 0;
         display: grid;
         grid-template-rows: auto 1fr auto;
-        padding: var(--safe-top) 16px var(--safe-bottom);
+        padding: calc(var(--safe-top) + 70px) 16px var(--safe-bottom);
         z-index: 2;
         pointer-events: none;
       }
@@ -845,25 +845,46 @@ function renderApp(url) {
         white-space: nowrap;
         border: 0;
       }
-      .nav-toggle {
+      .app-header {
         position: absolute;
-        top: 14px;
-        left: 14px;
-        z-index: 9;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        height: calc(var(--safe-top) + 58px);
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 10px 14px 10px;
+        background: linear-gradient(180deg, rgba(8,8,10,.96), rgba(8,8,10,.62));
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(14px);
       }
+      .frame-pill {
+        font-size: .82rem;
+        border: 1px solid var(--outline);
+        border-radius: 999px;
+        background: rgba(255,255,255,.08);
+        padding: 7px 12px;
+      }
+      .app-header-title { font-weight: 700; letter-spacing: .01em; }
+      .nav-toggle { z-index: 12; }
       .burger-menu {
         position: absolute;
-        top: 58px;
-        left: 14px;
-        z-index: 9;
-        border: 1px solid var(--outline);
-        background: var(--panel-strong);
-        border-radius: 14px;
-        padding: 8px;
-        min-width: 180px;
-        display: none;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(80vw, 290px);
+        z-index: 11;
+        border-right: 1px solid var(--outline);
+        background: rgba(12, 12, 16, 0.98);
+        padding: calc(var(--safe-top) + 74px) 12px 18px;
+        display: grid;
+        gap: 6px;
+        transform: translateX(-110%);
+        transition: transform 220ms ease;
       }
-      .burger-menu.open { display: grid; gap: 6px; }
+      .burger-menu.open { transform: translateX(0); }
       .burger-menu a {
         color: var(--text);
         text-decoration: none;
@@ -908,7 +929,11 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
-        <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+        <header class="app-header">
+          <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+          <div class="app-header-title">e621 Reels</div>
+          <div class="frame-pill">Reel frame</div>
+        </header>
         <nav class="burger-menu" id="burgerMenu">
           <a href="/" data-page-nav>Reels feed</a>
           <a href="/photos" data-page-nav>Photos grid</a>
@@ -1130,6 +1155,7 @@ function renderApp(url) {
       navToggleButton.addEventListener('click', (event) => {
         event.stopPropagation();
         burgerMenu.classList.toggle('open');
+        navToggleButton.setAttribute('aria-label', burgerMenu.classList.contains('open') ? 'Close navigation' : 'Open navigation');
       });
 
       function navigateWithTransition(href) {
@@ -2347,27 +2373,11 @@ function renderApp(url) {
 
 function renderPhotoGridPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
-  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/" data-page-nav>Reels feed</a><a href="/photos" data-page-nav>Photos grid</a><a href="/about" data-page-nav>About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
-  <div class="status" id="status">Loading photos…</div>
-  <pre class="error" id="errorBox" hidden></pre>
-  <div class="lightbox" id="lightbox"><img id="lightboxImage" alt="Expanded image"/><div class="credit" id="lightboxCredit"></div></div>
-  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));const goPage=(href)=>{if(!href)return;if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.location.href=href;return;}if(document.startViewTransition){document.startViewTransition(()=>{window.location.href=href});return;}document.body.classList.add('page-transitioning');setTimeout(()=>{window.location.href=href},180);};document.querySelectorAll('a[data-page-nav]').forEach((a)=>a.addEventListener('click',(e)=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();goPage(a.href);}));
-  const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxImage=document.getElementById('lightboxImage');const lightboxCredit=document.getElementById('lightboxCredit');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;
-  function showError(detail){errorBox.hidden=false;errorBox.textContent=detail}
-  function photoTagsFromUrl(){const url=new URL(window.location.href);const raw=(url.searchParams.get('tags')||'').trim().split(/\\s+/).filter(Boolean);const rating=(url.searchParams.get('rating')||'').trim().toLowerCase();const ratio=(url.searchParams.get('ratio')||'').trim().toLowerCase();const tags=['order:score','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}
-  function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return {id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}
-  function openLightbox(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const p=allPosts[index];lightboxImage.src=p.mediaUrl||p.previewUrl;lightboxCredit.innerHTML='Artist: '+p.artistText+' • <a href=\"'+p.sourceUrl+'\" target=\"_blank\" rel=\"noreferrer\">View post</a>';lightbox.classList.add('open');}
-  function moveLightbox(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length)return;openLightbox(next);}
-  function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&& (p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}
-  async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){const msg=String(err&&err.message?err.message:err);console.error('photo-grid load failed',{upstreamUrl:upstreamUrl.toString(),error:msg});status.textContent=msg.includes('http=403')?'e621 blocked this browser request (403). Retrying may work later.':'Could not load photos right now.';showError(msg);}finally{loading=false;}}
-  function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}
-  grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});
-  lightbox.addEventListener('click',()=>{lightbox.classList.remove('open');});
-  document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')lightbox.classList.remove('open');if(event.key==='ArrowDown'||event.key==='ArrowRight')moveLightbox(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')moveLightbox(-1);});
-  lightbox.addEventListener('touchstart',(event)=>{touchStartY=event.touches[0].clientY;},{passive:true});
-  lightbox.addEventListener('touchend',(event)=>{const deltaY=event.changedTouches[0].clientY-touchStartY;if(Math.abs(deltaY)<40)return;if(deltaY<0)moveLightbox(-1);if(deltaY>0)moveLightbox(1);},{passive:true});
-  const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></body></html>`;
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}header{position:sticky;top:0;z-index:12;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.mode-pill{margin-left:auto;font-size:.8rem;padding:6px 10px;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:rgba(255,255,255,.06)}.menu{position:fixed;left:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-right:1px solid rgba(255,255,255,.18);transform:translateX(-110%);transition:transform .22s ease;z-index:20}.menu.open{transform:translateX(0)}.menu a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.menu a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox.open{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}</style></head>
+  <body><nav class="menu" id="menu"><a href="/" data-page-nav>Reels feed</a><a href="/photos" data-page-nav>Photos grid</a><a href="/about" data-page-nav>About</a></nav><div class="frame"><header><button class="action" id="menuBtn">☰</button><strong>Infinite Photo Grid</strong><span class="mode-pill">Photo frame</span></header><main class="grid" id="grid"></main>
+  <div class="status" id="status">Loading photos…</div><pre class="error" id="errorBox" hidden></pre>
+  <div class="lightbox" id="lightbox"><div class="swipe-arrow left">‹</div><div class="swipe-arrow right">›</div><div class="down-hint" id="downHint">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div><div class="credit" id="lightboxCredit"></div></div>
+  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));const goPage=(href)=>{if(!href)return;if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.location.href=href;return;}if(document.startViewTransition){document.startViewTransition(()=>{window.location.href=href});return;}document.body.classList.add('page-transitioning');setTimeout(()=>{window.location.href=href},180);};document.querySelectorAll('a[data-page-nav]').forEach((a)=>a.addEventListener('click',(e)=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();goPage(a.href);}));const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxTrack=document.getElementById('lightboxTrack');const lightboxCredit=document.getElementById('lightboxCredit');const downHint=document.getElementById('downHint');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;let lightboxTouchStartX=0;let lightboxTouchStartY=0;let lightboxTouchActive=false;let lightboxBaseX=0;function showError(detail){errorBox.hidden=false;errorBox.textContent=detail}function photoTagsFromUrl(){const url=new URL(window.location.href);const raw=(url.searchParams.get('tags')||'').trim().split(/\s+/).filter(Boolean);const rating=(url.searchParams.get('rating')||'').trim().toLowerCase();const ratio=(url.searchParams.get('ratio')||'').trim().toLowerCase();const tags=['order:score','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return{id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}function buildLightboxSlide(post){const slide=document.createElement('div');slide.className='lightbox-slide';const image=document.createElement('img');image.alt='Expanded image '+(post.id||'');image.src=post.mediaUrl||post.previewUrl;image.addEventListener('load',()=>{downHint.classList.toggle('show',image.naturalHeight>image.naturalWidth*1.45);},{once:true});slide.appendChild(image);return slide;}function updateLightboxCredit(post){lightboxCredit.innerHTML='Artist: '+post.artistText+' • <a href="'+post.sourceUrl+'" target="_blank" rel="noreferrer">View post</a>';}function setLightboxTrack(offsetPx,animated){lightboxTrack.classList.toggle('animating',Boolean(animated));lightboxTrack.style.transform='translate3d('+offsetPx+'px,0,0)';}function currentBase(){return allPosts[lightboxIndex-1]?-window.innerWidth:0;}function renderLightboxAt(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const prev=allPosts[index-1]||null;const current=allPosts[index];const next=allPosts[index+1]||null;lightboxTrack.innerHTML='';if(prev)lightboxTrack.appendChild(buildLightboxSlide(prev));lightboxTrack.appendChild(buildLightboxSlide(current));if(next)lightboxTrack.appendChild(buildLightboxSlide(next));lightboxBaseX=currentBase();setLightboxTrack(lightboxBaseX,false);updateLightboxCredit(current);}function openLightbox(index){if(index<0||index>=allPosts.length)return;renderLightboxAt(index);lightbox.classList.add('open');}function closeLightbox(){lightbox.classList.remove('open');lightboxTrack.innerHTML='';lightboxIndex=-1;downHint.classList.remove('show');}function settleMove(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length){setLightboxTrack(lightboxBaseX,true);return;}const target=delta>0?lightboxBaseX-window.innerWidth:lightboxBaseX+window.innerWidth;setLightboxTrack(target,true);setTimeout(()=>{renderLightboxAt(next);},280);}function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&&(p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){const msg=String(err&&err.message?err.message:err);console.error('photo-grid load failed',{upstreamUrl:upstreamUrl.toString(),error:msg});status.textContent=msg.includes('http=403')?'e621 blocked this browser request (403). Retrying may work later.':'Could not load photos right now.';showError(msg);}finally{loading=false;}}function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});lightbox.addEventListener('click',(event)=>{if(event.target===lightbox||event.target===lightboxCredit)closeLightbox();});document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')closeLightbox();if(event.key==='ArrowDown'||event.key==='ArrowRight')settleMove(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')settleMove(-1);});lightbox.addEventListener('touchstart',(event)=>{if(!lightbox.classList.contains('open'))return;lightboxTouchActive=true;lightboxTouchStartX=event.touches[0].clientX;lightboxTouchStartY=event.touches[0].clientY;lightboxBaseX=currentBase();lightboxTrack.classList.remove('animating');},{passive:true});lightbox.addEventListener('touchmove',(event)=>{if(!lightboxTouchActive)return;const dx=event.touches[0].clientX-lightboxTouchStartX;const dy=event.touches[0].clientY-lightboxTouchStartY;if(Math.abs(dx)>=Math.abs(dy)){event.preventDefault();setLightboxTrack(lightboxBaseX+dx,false);}},{passive:false});lightbox.addEventListener('touchend',(event)=>{if(!lightboxTouchActive)return;lightboxTouchActive=false;const dx=event.changedTouches[0].clientX-lightboxTouchStartX;const dy=event.changedTouches[0].clientY-lightboxTouchStartY;const threshold=window.innerWidth*0.4;if(Math.abs(dx)>=Math.abs(dy)){if(dx<=-threshold){settleMove(1);return;}if(dx>=threshold){settleMove(-1);return;}setLightboxTrack(lightboxBaseX,true);return;}setLightboxTrack(lightboxBaseX,true);},{passive:true});const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></div></body></html>`;
 }
 
 function renderAboutPage() {

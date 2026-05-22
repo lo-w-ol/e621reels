@@ -21,3 +21,48 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22: Reviewed dissatisfaction follow-up and implemented smooth inter-page transitions for burger-menu/back-link navigation using View Transitions API with fade fallback and reduced-motion bypass.
 - 2026-05-22: Kept navigation interception scoped to same-tab left-clicks to preserve expected new-tab/modified-click behavior.
 - 2026-05-22: Added a lightweight in-slide loading indicator for media files (images and videos), tied to existing `.loading` and `.awaiting-play` classes for fast visual feedback.
+- Reviewed reel page shell/header/menu CSS/markup in `renderApp`.
+- Reviewed photo grid page inline shell/header/menu layout in `renderPhotoGridPage`.
+
+## Summarized thinking
+- To make the site feel more app-like, both modes should share a persistent framed surface and a continuous top header.
+- A swipe-style burger menu is best implemented as an off-canvas drawer with transform transitions, instead of a popover dropdown.
+- Keep existing view-transition navigation so URL changes feel less like page breaks while preserving normal modified-click behavior.
+
+## Summarized changes with dates
+- 2026-05-22: Reworked reel mode UI to use a continuous top app header and an off-canvas burger drawer that slides in from the left.
+- 2026-05-22: Reworked photo mode UI into a framed app surface with the same continuous top header pattern and swipe-open off-canvas burger drawer.
+- 2026-05-22: Kept smooth page navigation transitions intact while integrating the new shared header/drawer behavior.
+- Reviewed `renderPhotoGridPage` lightbox markup/CSS/JS behavior for image sizing and swipe handling.
+- Reviewed existing reel swipe transition behavior to mirror interaction feel in photo lightbox.
+
+## Summarized thinking
+- To match reel feel, photo lightbox needs horizontal swipe transitions with animated track movement instead of abrupt image replacement.
+- For comic/tall images, setting displayed image width to 100% inside fullscreen slides preserves full-width app feel while allowing tall content to remain large.
+- Preserve lightweight implementation by pre-rendering previous/current/next slides only and animating between them.
+
+## Summarized changes with dates
+- 2026-05-22: Reworked photo lightbox into a slide-track viewer with smooth left/right swipe transitions between adjacent images.
+- 2026-05-22: Updated lightbox image presentation to render at 100% width in fullscreen slide panels so tall images (e.g., comic strips) stay large and full-width.
+- 2026-05-22: Added gesture handling that prioritizes horizontal swipe for next/previous and keeps keyboard navigation + escape close behavior.
+- Reviewed latest photo lightbox gesture handling and identified vertical swipe still triggering close behavior.
+- Reviewed Google Photos-like swipe threshold expectation (commit only when drag passes roughly half-screen and user releases).
+
+## Summarized thinking
+- Lightbox should never close on vertical drag because users need vertical movement for tall/comic images.
+- Smoothness needs live drag tracking during touchmove, then settle on release with a 50% width threshold to switch images.
+- Persistent directional hints improve discoverability: side arrows for horizontal swipe, and conditional down hint for tall images.
+
+## Summarized changes with dates
+- 2026-05-22: Removed vertical-swipe-to-close behavior in photo lightbox to prevent accidental exits while inspecting tall images.
+- 2026-05-22: Implemented live touch-drag translation with release-based commit logic that only changes image when swipe exceeds 50% viewport width.
+- 2026-05-22: Added subtle side swipe arrows and a conditional down-arrow hint shown for tall images to indicate vertical exploration.
+- Reviewed latest photo lightbox swipe threshold constant and slide alignment CSS.
+
+## Summarized thinking
+- Lowering swipe commit threshold from 50% to 40% should keep intent-based navigation while making transitions feel less effortful.
+- Center alignment should apply to smaller-than-viewport-height images so they sit visually centered in lightbox.
+
+## Summarized changes with dates
+- 2026-05-22: Reduced photo lightbox horizontal swipe release threshold to 40% viewport width for easier next/previous transitions.
+- 2026-05-22: Adjusted photo lightbox slide alignment to center smaller images vertically in the viewport.
