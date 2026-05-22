@@ -153,7 +153,8 @@ async function handlePosts(request, url) {
         ? data.posts
             .filter((post) => {
               const ext = String(post?.file?.ext || '').toLowerCase();
-              if (!post?.file?.url || !SUPPORTED_MEDIA.has(ext)) return false;
+              const hasRenderableMedia = Boolean(post?.file?.url || post?.sample?.url || post?.preview?.url);
+              if (!hasRenderableMedia || !SUPPORTED_MEDIA.has(ext)) return false;
               return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
             })
             .map((post) => mapPost(post))
@@ -300,8 +301,8 @@ function mapPost(post) {
     width,
     height,
     createdAt: post.created_at,
-    mediaUrl: post.file.url,
-    previewUrl: post.preview?.url || post.sample?.url || post.file.url,
+    mediaUrl: post.file.url || post.sample?.url || post.preview?.url || '',
+    previewUrl: post.preview?.url || post.sample?.url || post.file.url || '',
     sourceUrl: 'https://e621.net/posts/' + post.id,
     description: [
       artist.length ? 'Artist: ' + artist.join(', ') : 'Artist unknown',
@@ -2252,10 +2253,12 @@ function renderApp(url) {
 
 function renderPhotoGridPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1}.tile img{width:100%;height:100%;object-fit:cover;display:block}</style></head>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1}.tile img{width:100%;height:100%;object-fit:cover;display:block}</style></head>
   <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/">Reels feed</a><a href="/photos">Photos grid</a><a href="/about">About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
+  <div class="status" id="status">Loading photos…</div>
   <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));
-  let page=1,loading=false;async function load(){if(loading)return;loading=true;const res=await fetch('/api/posts?media=image&page='+page);const data=await res.json();(data.posts||[]).forEach((p)=>{const t=document.createElement('article');t.className='tile';const i=document.createElement('img');i.loading='lazy';i.src=p.previewUrl||p.mediaUrl;i.alt='e621 image '+p.id;t.appendChild(i);grid.appendChild(t)});page++;loading=false}
+  const status=document.getElementById('status');let page=1,loading=false,loaded=0;
+  async function load(){if(loading)return;loading=true;status.textContent='Loading photos…';try{const res=await fetch('/api/posts?media=image&mode=score&page='+page,{headers:{Accept:'application/json'}});if(!res.ok){throw new Error('Feed error '+res.status)}const data=await res.json();const posts=Array.isArray(data.posts)?data.posts:[];if(!posts.length&&loaded===0){status.textContent='No photos were returned. Try refreshing in a moment.';loading=false;return;}posts.forEach((p)=>{const src=p.mediaUrl||p.previewUrl;if(!src)return;const t=document.createElement('article');t.className='tile';const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+p.id;t.appendChild(i);grid.appendChild(t);loaded++;});status.textContent=loaded>0?('Loaded '+loaded+' photos'):status.textContent;page++;}catch(err){console.error(err);status.textContent='Could not load photos right now.';}finally{loading=false;}}
   const io=new IntersectionObserver((e)=>{if(e[0].isIntersecting)load()},{rootMargin:'800px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);load();</script></body></html>`;
 }
 
