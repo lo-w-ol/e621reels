@@ -66,3 +66,21 @@ When making changes in this repository, append entries to this file so the next 
 ## Summarized changes with dates
 - 2026-05-22: Reduced photo lightbox horizontal swipe release threshold to 40% viewport width for easier next/previous transitions.
 - 2026-05-22: Adjusted photo lightbox slide alignment to center smaller images vertically in the viewport.
+
+## Summary title: Reels stripped UI + horizontal scrub seek
+
+### Summarized context read
+- Reviewed `renderApp` reel-mode HTML/CSS shell, overlay controls, and menu/settings surfaces in `src/worker.js`.
+- Reviewed reel gesture handlers (`beginGesture`, `updateGesture`, `finalizeSwipe`) and playback/meta updates (`updateMeta`, `startPlaybackForPost`) in `src/worker.js`.
+- Reviewed photo-mode credit treatment to mirror a minimal artist credit + source link presentation style.
+
+### Summarized thinking
+- User requested a reel experience with almost all chrome removed, while preserving mute control and artist attribution similar to photo mode, so the safest path is to keep existing feed logic while collapsing visible controls to a minimal bottom credit strip.
+- Existing swipe navigation is vertical, so scrub should be introduced as a horizontal gesture on active video only; this avoids conflict with up/down reel navigation and matches YouTube-mobile-style side scrub behavior.
+- To reduce risk of runtime breakage from dependent selectors/listeners, preserve required DOM IDs in hidden compatibility nodes while removing visible UI surfaces.
+
+### Summarized changes with dates
+- 2026-05-22 05:03 UTC: Removed visible reel-side UI surfaces (header/menu/settings/top badges/jump/buttons/filter panel/progress chrome), keeping a minimal overlay with artist credit and mute button.
+- 2026-05-22 05:03 UTC: Updated reel meta rendering to present artist-focused credit text with inline “View post” link, matching photo-mode credit intent.
+- 2026-05-22 05:03 UTC: Implemented horizontal video scrubbing during side drag, including a transient scrub HUD with current time / total duration and progress bar; vertical drag behavior remains reel navigation.
+- 2026-05-22 05:03 UTC: Added hidden compatibility nodes for legacy element IDs so existing script wiring remains stable while UI is visually simplified.
