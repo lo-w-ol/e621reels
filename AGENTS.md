@@ -117,3 +117,23 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22 05:19 UTC: Refactored global navigation into shared `renderGlobalHeader(...)` + `renderGlobalHeaderScript()` helpers reused by reels, photos, and about pages.
 - 2026-05-22 05:19 UTC: Removed legacy photo-page menu/header wiring (`#menu`, `#menuBtn`, and related page-local handlers) and switched photos to the shared global menu.
 - 2026-05-22 05:19 UTC: Standardized menu open/close and same-tab transition navigation behavior through one shared script source to prevent page-by-page drift.
+
+## Summary title: Direct-only e621 data path + dedicated privacy page
+
+### Summarized context read
+- Reviewed reel feed request flow in `src/worker.js`, especially `fetchPostsPreferDirect`, `fetchPostsDirectly`, and failure messaging.
+- Reviewed tag autocomplete network flow in `src/worker.js`, including direct request handling and worker fallback usage.
+- Reviewed route handlers and page render helpers (`renderAboutPage`, `renderGlobalHeader`) to add a new privacy-focused page and navigation link.
+- Reviewed `README.md` notes describing direct-first behavior with worker fallback language.
+
+### Summarized thinking
+- To reduce first-party compliance surface, the browser should request e621 APIs directly with no client-to-worker fallback path for feed/autocomplete.
+- A dedicated privacy page should explicitly explain what this site does and does not process, and clearly disclose unavoidable third-party processing by e621.
+- Keeping the existing worker API endpoints intact for operational compatibility is acceptable as long as frontend flows no longer invoke them as fallback.
+
+### Summarized changes with dates
+- 2026-05-22 05:55 UTC: Removed reel feed client-side worker fallback logic and made the feed path direct-only to e621.
+- 2026-05-22 05:55 UTC: Removed tag autocomplete client-side worker fallback logic and made autocomplete direct-only to e621.
+- 2026-05-22 05:55 UTC: Added a new `/privacy` page detailing first-party privacy scope, direct e621 data flow, and no client→worker relay for feed/autocomplete.
+- 2026-05-22 05:55 UTC: Added Privacy navigation entry to the shared global header menu across pages.
+- 2026-05-22 05:55 UTC: Updated `README.md` notes to reflect direct-only client API behavior and the new privacy page.

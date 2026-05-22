@@ -63,6 +63,15 @@ export default {
       });
     }
 
+    if (url.pathname === '/privacy') {
+      return new Response(renderPrivacyPage(), {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(renderApp(url), {
         headers: {
@@ -1504,46 +1513,30 @@ function renderApp(url) {
 
       async function fetchTagAutocomplete(query) {
         const upstreamUrl = new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);
-        try {
-          upstreamUrl.searchParams.set('search[name_matches]', query + '*');
-          const response = await fetch(upstreamUrl.toString(), {
-            headers: { Accept: 'application/json' },
-          });
-          const payload = await parseJsonSafely(response);
-          if (!response.ok) {
-            throw createFetchError('Direct tag autocomplete failed', {
-              url: upstreamUrl.toString(),
-              status: response.status,
-              payload,
-            });
-          }
-          return Array.isArray(payload)
-            ? payload
-                .filter((tag) => tag && typeof tag.name === 'string')
-                .slice(0, TAG_AUTOCOMPLETE_LIMIT)
-                .map((tag) => ({
-                  id: tag.id || null,
-                  name: tag.name,
-                  category: Number.isFinite(tag.category) ? tag.category : null,
-                  postCount: Number.isFinite(tag.post_count) ? tag.post_count : 0,
-                  antecedentName: tag.antecedent_name || null,
-                }))
-            : [];
-        } catch (directError) {
-          console.warn('Direct tag autocomplete failed, trying worker fallback', directError);
-        }
-
-        const workerUrl = '/api/tags/autocomplete?q=' + encodeURIComponent(query);
-        const workerResponse = await fetch(workerUrl);
-        const workerPayload = await parseJsonSafely(workerResponse);
-        if (!workerResponse.ok || !workerPayload || !Array.isArray(workerPayload.tags)) {
-          throw createFetchError('Worker tag autocomplete fallback failed', {
-            url: workerUrl,
-            status: workerResponse.status,
-            payload: workerPayload,
+        upstreamUrl.searchParams.set('search[name_matches]', query + '*');
+        const response = await fetch(upstreamUrl.toString(), {
+          headers: { Accept: 'application/json' },
+        });
+        const payload = await parseJsonSafely(response);
+        if (!response.ok) {
+          throw createFetchError('Direct tag autocomplete failed', {
+            url: upstreamUrl.toString(),
+            status: response.status,
+            payload,
           });
         }
-        return workerPayload.tags;
+        return Array.isArray(payload)
+          ? payload
+              .filter((tag) => tag && typeof tag.name === 'string')
+              .slice(0, TAG_AUTOCOMPLETE_LIMIT)
+              .map((tag) => ({
+                id: tag.id || null,
+                name: tag.name,
+                category: Number.isFinite(tag.category) ? tag.category : null,
+                postCount: Number.isFinite(tag.post_count) ? tag.post_count : 0,
+                antecedentName: tag.antecedent_name || null,
+              }))
+          : [];
       }
 
       function handleAutocompleteKeydown(event) {
@@ -1739,48 +1732,23 @@ function renderApp(url) {
           }
         } catch (error) {
           console.error('[feed] request failed', error);
-          renderEmpty('Could not load posts', 'The feed request failed. Please try again in a moment. Open the console for worker and fallback details.');
+          renderEmpty('Could not load posts', 'The direct e621 request failed. Please try again in a moment.');
         } finally {
           state.loading = false;
         }
       }
 
       async function fetchPostsPreferDirect(params) {
-        try {
-          const directData = await fetchPostsDirectly(params, null);
-          return { data: directData, source: 'client-direct' };
-        } catch (directError) {
-          console.warn('[feed] direct request failed, trying worker fallback', directError);
-        }
-
-        const workerUrl = '/api/posts?' + params.toString();
-        try {
-          const workerResponse = await fetch(workerUrl);
-          const workerPayload = await parseJsonSafely(workerResponse);
-          if (!workerResponse.ok) {
-            throw createFetchError('Worker feed fallback failed', {
-              url: workerUrl,
-              status: workerResponse.status,
-              payload: workerPayload,
-            });
-          }
-          return { data: workerPayload || {}, source: 'worker-fallback' };
-        } catch (workerError) {
-          console.error('[feed] worker fallback failed', workerError);
-          throw workerError;
-        }
+        const directData = await fetchPostsDirectly(params);
+        return { data: directData, source: 'client-direct' };
       }
 
-      async function fetchPostsDirectly(params, workerError) {
+      async function fetchPostsDirectly(params) {
         const upstreamUrl = new URL(CLIENT_E621_API);
         upstreamUrl.searchParams.set('limit', '24');
         upstreamUrl.searchParams.set('page', params.get('page'));
         upstreamUrl.searchParams.set('tags', buildApiTags(params));
 
-        console.warn('[feed] falling back to direct browser request', {
-          upstreamUrl: upstreamUrl.toString(),
-          workerError: workerError ? workerError.context : null,
-        });
 
         const upstreamResponse = await fetch(upstreamUrl.toString(), {
           headers: { Accept: 'application/json' },
@@ -1792,7 +1760,6 @@ function renderApp(url) {
             url: upstreamUrl.toString(),
             status: upstreamResponse.status,
             payload: upstreamPayload,
-            workerError: workerError ? workerError.context : null,
           });
           console.error('[feed] direct request failed', directError.context);
           throw directError;
@@ -2370,8 +2337,13 @@ function renderAboutPage() {
 
 
 
+
+function renderPrivacyPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:20px}p,li{line-height:1.55}a{color:#ff73af}body.page-transitioning{opacity:0;transition:opacity .22s ease}</style></head><body>${renderGlobalHeader('privacy')}<div class="card"><h1>Privacy & Data Flow</h1><p>This site is designed to avoid first-party data harvesting. It does not use user accounts, analytics SDKs, ad trackers, or persistent profile storage.</p><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> in your browser.</li><li>This site no longer uses client-to-worker API fallbacks for feed or autocomplete requests.</li><li>The Cloudflare Worker serves the app HTML/CSS/JS shell pages only.</li></ul><h2>What this means for privacy</h2><ul><li>Your browser connects directly to e621 for content APIs, so e621 receives normal web request metadata (for example IP address, user agent, and requested query tags) under their policies.</li><li>This site itself is intended to minimize data handling by avoiding first-party tracking features.</li></ul><h2>Open source transparency</h2><p>The code is open source for inspection and audit. You can review implementation details on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderGlobalHeaderScript()}</script></body></html>`;
+}
+
 function renderGlobalHeader(active) {
-  return `<header class="global-header"><button class="global-menu-toggle" id="globalMenuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="globalMenu">☰</button><nav class="global-drawer" id="globalMenu"><a href="/" data-page-nav${active === 'reels' ? ' aria-current="page"' : ''}>Reels</a><a href="/photos" data-page-nav${active === 'photos' ? ' aria-current="page"' : ''}>Photos</a><a href="/about" data-page-nav${active === 'about' ? ' aria-current="page"' : ''}>About</a></nav></header>`;
+  return `<header class="global-header"><button class="global-menu-toggle" id="globalMenuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="globalMenu">☰</button><nav class="global-drawer" id="globalMenu"><a href="/" data-page-nav${active === 'reels' ? ' aria-current="page"' : ''}>Reels</a><a href="/photos" data-page-nav${active === 'photos' ? ' aria-current="page"' : ''}>Photos</a><a href="/about" data-page-nav${active === 'about' ? ' aria-current=\"page\"' : ''}>About</a><a href="/privacy" data-page-nav${active === 'privacy' ? ' aria-current=\"page\"' : ''}>Privacy</a></nav></header>`;
 }
 
 function renderGlobalHeaderScript() {
