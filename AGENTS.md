@@ -45,3 +45,15 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22: Reworked photo lightbox into a slide-track viewer with smooth left/right swipe transitions between adjacent images.
 - 2026-05-22: Updated lightbox image presentation to render at 100% width in fullscreen slide panels so tall images (e.g., comic strips) stay large and full-width.
 - 2026-05-22: Added gesture handling that prioritizes horizontal swipe for next/previous and keeps keyboard navigation + escape close behavior.
+- Reviewed latest photo lightbox gesture handling and identified vertical swipe still triggering close behavior.
+- Reviewed Google Photos-like swipe threshold expectation (commit only when drag passes roughly half-screen and user releases).
+
+## Summarized thinking
+- Lightbox should never close on vertical drag because users need vertical movement for tall/comic images.
+- Smoothness needs live drag tracking during touchmove, then settle on release with a 50% width threshold to switch images.
+- Persistent directional hints improve discoverability: side arrows for horizontal swipe, and conditional down hint for tall images.
+
+## Summarized changes with dates
+- 2026-05-22: Removed vertical-swipe-to-close behavior in photo lightbox to prevent accidental exits while inspecting tall images.
+- 2026-05-22: Implemented live touch-drag translation with release-based commit logic that only changes image when swipe exceeds 50% viewport width.
+- 2026-05-22: Added subtle side swipe arrows and a conditional down-arrow hint shown for tall images to indicate vertical exploration.
