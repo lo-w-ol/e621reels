@@ -33,3 +33,15 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22: Reworked reel mode UI to use a continuous top app header and an off-canvas burger drawer that slides in from the left.
 - 2026-05-22: Reworked photo mode UI into a framed app surface with the same continuous top header pattern and swipe-open off-canvas burger drawer.
 - 2026-05-22: Kept smooth page navigation transitions intact while integrating the new shared header/drawer behavior.
+- Reviewed `renderPhotoGridPage` lightbox markup/CSS/JS behavior for image sizing and swipe handling.
+- Reviewed existing reel swipe transition behavior to mirror interaction feel in photo lightbox.
+
+## Summarized thinking
+- To match reel feel, photo lightbox needs horizontal swipe transitions with animated track movement instead of abrupt image replacement.
+- For comic/tall images, setting displayed image width to 100% inside fullscreen slides preserves full-width app feel while allowing tall content to remain large.
+- Preserve lightweight implementation by pre-rendering previous/current/next slides only and animating between them.
+
+## Summarized changes with dates
+- 2026-05-22: Reworked photo lightbox into a slide-track viewer with smooth left/right swipe transitions between adjacent images.
+- 2026-05-22: Updated lightbox image presentation to render at 100% width in fullscreen slide panels so tall images (e.g., comic strips) stay large and full-width.
+- 2026-05-22: Added gesture handling that prioritizes horizontal swipe for next/previous and keeps keyboard navigation + escape close behavior.
