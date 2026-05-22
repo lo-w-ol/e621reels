@@ -57,3 +57,12 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22: Removed vertical-swipe-to-close behavior in photo lightbox to prevent accidental exits while inspecting tall images.
 - 2026-05-22: Implemented live touch-drag translation with release-based commit logic that only changes image when swipe exceeds 50% viewport width.
 - 2026-05-22: Added subtle side swipe arrows and a conditional down-arrow hint shown for tall images to indicate vertical exploration.
+- Reviewed latest photo lightbox swipe threshold constant and slide alignment CSS.
+
+## Summarized thinking
+- Lowering swipe commit threshold from 50% to 40% should keep intent-based navigation while making transitions feel less effortful.
+- Center alignment should apply to smaller-than-viewport-height images so they sit visually centered in lightbox.
+
+## Summarized changes with dates
+- 2026-05-22: Reduced photo lightbox horizontal swipe release threshold to 40% viewport width for easier next/previous transitions.
+- 2026-05-22: Adjusted photo lightbox slide alignment to center smaller images vertically in the viewport.
