@@ -467,6 +467,47 @@ function renderApp(url) {
       .reel-slide.awaiting-play .reel-media-fallback {
         opacity: 0.92;
       }
+      .load-indicator {
+        position: absolute;
+        left: 50%;
+        bottom: calc(var(--safe-bottom) + 108px);
+        transform: translateX(-50%);
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.62);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        opacity: 0;
+        transition: opacity 120ms linear;
+        pointer-events: none;
+      }
+      .reel-slide.loading .load-indicator,
+      .reel-slide.awaiting-play .load-indicator {
+        opacity: 1;
+      }
+      .load-indicator-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.95);
+        animation: reelPulse 0.85s ease-in-out infinite alternate;
+      }
+      @keyframes reelPulse {
+        from { transform: scale(0.72); opacity: 0.5; }
+        to { transform: scale(1.02); opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .load-indicator-dot {
+          animation: none;
+        }
+      }
       .gradient {
         position: absolute;
         inset: 0;
@@ -2059,6 +2100,13 @@ function renderApp(url) {
         fallback.className = 'reel-media-fallback';
         fallback.style.backgroundImage = post.previewUrl ? 'url("' + post.previewUrl.replace(/"/g, '\\"') + '")' : 'none';
         slide.appendChild(fallback);
+
+        const loadIndicator = document.createElement('div');
+        loadIndicator.className = 'load-indicator';
+        loadIndicator.setAttribute('role', 'status');
+        loadIndicator.setAttribute('aria-live', 'polite');
+        loadIndicator.innerHTML = '<span class="load-indicator-dot" aria-hidden="true"></span><span>Loading media</span>';
+        slide.appendChild(loadIndicator);
 
         let media;
         if (post.type === 'video') {
