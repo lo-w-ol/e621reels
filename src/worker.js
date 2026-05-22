@@ -518,7 +518,7 @@ function renderApp(url) {
         position: absolute;
         inset: 0;
         display: grid;
-        grid-template-rows: auto 1fr auto;
+        grid-template-rows: 1fr auto;
         padding: calc(var(--safe-top) + 70px) 16px var(--safe-bottom);
         z-index: 2;
         pointer-events: none;
@@ -526,11 +526,17 @@ function renderApp(url) {
       .overlay > * {
         pointer-events: auto;
       }
-      .topbar {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: flex-start;
+      .topbar,
+      .status-card,
+      .jump,
+      .pill-row,
+      .settings-toggle,
+      .filter-panel,
+      .app-header,
+      .burger-menu,
+      .progress,
+      .tagline {
+        display: none !important;
       }
       .brand h1 {
         margin: 0;
@@ -581,8 +587,8 @@ function renderApp(url) {
         z-index: 3;
       }
       .bottom {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
+        justify-content: space-between;
         gap: 14px;
         align-items: end;
       }
@@ -592,8 +598,7 @@ function renderApp(url) {
         min-width: 0;
       }
       .meta h2 {
-        margin: 0;
-        font-size: 1.2rem;
+        display: none;
       }
       .meta p {
         margin: 0;
@@ -611,10 +616,37 @@ function renderApp(url) {
         white-space: nowrap;
       }
       .side-actions {
-        display: grid;
-        gap: 12px;
+        display: flex;
+        gap: 8px;
         justify-items: center;
       }
+      .credit {
+        font-size: .95rem;
+        background: rgba(8,8,12,.5);
+        border: 1px solid var(--outline);
+        border-radius: 999px;
+        padding: 9px 14px;
+        backdrop-filter: blur(16px);
+      }
+      .credit a { color: #fff; }
+      .scrub-hud {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 12;
+        min-width: 220px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(0,0,0,.72);
+        border: 1px solid rgba(255,255,255,.26);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .12s linear;
+      }
+      .scrub-hud.show { opacity: 1; }
+      .scrub-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.18); overflow: hidden; margin-top: 8px; }
+      .scrub-bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #ff59a0 0%, #ffd36b 100%); }
       .action-button {
         width: 54px;
         height: 54px;
@@ -929,119 +961,36 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
-        <header class="app-header">
-          <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
-          <div class="app-header-title">e621 Reels</div>
-          <div class="frame-pill">Reel frame</div>
-        </header>
-        <nav class="burger-menu" id="burgerMenu">
-          <a href="/" data-page-nav>Reels feed</a>
-          <a href="/photos" data-page-nav>Photos grid</a>
-          <a href="/about" data-page-nav>About</a>
-        </nav>
-        <div class="progress"><div id="progressBar"></div></div>
         <div class="viewport" id="viewport">
           <div class="reel-track" id="reelTrack"></div>
         </div>
         <div class="gradient"></div>
+        <div class="scrub-hud" id="scrubHud" aria-live="polite">
+          <div id="scrubTime">0:00 / 0:00</div>
+          <div class="scrub-bar"><div id="scrubBar"></div></div>
+        </div>
         <section class="overlay">
-          <div class="topbar">
-            <div class="brand">
-              <p class="tagline">Trending animated posts from e621</p>
-              <h1>e621 Reels</h1>
-            </div>
-            <div class="badge-row">
-              <div class="badge" id="sortBadge">Trending</div>
-              <div class="badge" id="ratioBadge">Any aspect</div>
-              <div class="counter" id="counterBadge">0 / 0</div>
-            </div>
-          </div>
-
-          <div class="status-card" id="statusCard">
-            <strong id="statusTitle">Loading feed…</strong>
-            <p class="status" id="statusText">Fetching top posts from e621.</p>
-          </div>
-
           <div class="bottom">
             <div class="meta" id="metaBlock">
-              <div>
-                <h2 id="postTitle">Waiting for posts</h2>
-                <p id="postDescription">Use the settings cog to change feed filters or display options, then swipe up and down through posts.</p>
-              </div>
-              <div class="pill-row" id="tagList"></div>
-              <div class="jump">
-                <button class="secondary" id="previousButton" type="button">Previous</button>
-                <button class="primary" id="nextButton" type="button">Next</button>
-              </div>
+              <div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div>
             </div>
             <div class="side-actions">
               <button class="action-button" id="toggleMuteButton" type="button" aria-label="Toggle mute">🔇</button>
-              <div class="side-label">Sound</div>
-              <a class="action-button source-link" id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer" aria-label="Open post on e621">↗</a>
-              <div class="side-label">Source</div>
             </div>
           </div>
         </section>
-
-        <div class="settings-toggle">
-          <button class="action-button settings-button" id="toggleFiltersButton" type="button" aria-label="Open feed settings">⚙</button>
+        <div hidden aria-hidden="true">
+          <div id="statusCard"><strong id="statusTitle"></strong><p id="statusText"></p></div>
+          <div id="postTitle"></div><div id="tagList"></div><div id="sortBadge"></div><div id="ratioBadge"></div><div id="counterBadge"></div>
+          <div id="progressBar"></div><button id="nextButton" type="button"></button><button id="previousButton" type="button"></button>
+          <select id="modeSelect"><option value="trending">trending</option><option value="score">score</option></select>
+          <input id="tagsInput" /><select id="ratingSelect"><option value=""></option><option value="s">s</option><option value="q">q</option><option value="e">e</option></select>
+          <form id="filterPanel"></form><button id="toggleFiltersButton" type="button"></button><button id="resetButton" type="button"></button>
+          <select id="mediaDisplaySelect"><option value="contain">contain</option><option value="fullscreen">fullscreen</option></select>
+          <select id="ratioSelect"><option value=""></option><option value="vertical">vertical</option><option value="landscape">landscape</option></select>
+          <input id="hideTagsToggle" type="checkbox" /><div id="tagAutocomplete"></div><div id="tagAutocompleteList"></div>
+          <button id="navToggleButton" type="button"></button><nav id="burgerMenu"></nav>
         </div>
-
-        <form class="filter-panel" id="filterPanel">
-          <div>
-            <h3>Feed controls</h3>
-            <p class="field-help">Swipe vertically like Reels. Videos now play through before auto-advancing, while still preloading the next item to keep transitions smooth.</p>
-          </div>
-          <label>
-            <span>Sort mode</span>
-            <select id="modeSelect" name="mode">
-              <option value="trending">Trending / popular</option>
-              <option value="score">Top score</option>
-            </select>
-          </label>
-          <label>
-            <span>Tags</span>
-            <div class="input-with-autocomplete">
-              <input id="tagsInput" name="tags" type="text" placeholder="wolf animated" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-autocomplete="list" aria-controls="tagAutocomplete" aria-expanded="false" />
-              <div class="autocomplete" id="tagAutocomplete" hidden>
-                <div class="autocomplete-list" id="tagAutocompleteList"></div>
-              </div>
-            </div>
-          </label>
-          <label>
-            <span>Rating</span>
-            <select id="ratingSelect" name="rating">
-              <option value="">Any rating</option>
-              <option value="s">Safe</option>
-              <option value="q">Questionable</option>
-              <option value="e">Explicit</option>
-            </select>
-          </label>
-          <label>
-            <span>Display mode</span>
-            <select id="mediaDisplaySelect" name="displayMode">
-              <option value="contain">Show full aspect ratio</option>
-              <option value="fullscreen">Fill screen / crop</option>
-            </select>
-          </label>
-          <label>
-            <span>Aspect ratio filter</span>
-            <select id="ratioSelect" name="ratio">
-              <option value="">Any aspect ratio</option>
-              <option value="vertical">Portrait / vertical only</option>
-              <option value="landscape">Landscape only</option>
-            </select>
-          </label>
-          <label class="settings-option">
-            <input id="hideTagsToggle" name="hideTags" type="checkbox" />
-            <span>Hide the tag pills overlay by default for a cleaner viewing area.</span>
-          </label>
-          <div class="filter-actions">
-            <button class="primary" type="submit">Apply</button>
-            <button class="secondary" id="resetButton" type="button">Reset</button>
-          </div>
-          <p class="hint">Tap the current reel to pause or resume. Images advance after 10 seconds, and short videos loop until they have been on screen for at least 10 seconds before the feed advances.</p>
-        </form>
       </main>
     </div>
 
@@ -1096,6 +1045,8 @@ function renderApp(url) {
         pointerStartX: 0,
         pointerDeltaY: 0,
         pointerDeltaX: 0,
+        horizontalScrubbing: false,
+        scrubStartTime: 0,
         currentMedia: null,
         currentSlide: null,
         navigationToken: 0,
@@ -1144,6 +1095,9 @@ function renderApp(url) {
       const tagAutocompleteList = document.getElementById('tagAutocompleteList');
       const navToggleButton = document.getElementById('navToggleButton');
       const burgerMenu = document.getElementById('burgerMenu');
+      const scrubHud = document.getElementById('scrubHud');
+      const scrubTime = document.getElementById('scrubTime');
+      const scrubBar = document.getElementById('scrubBar');
 
       modeSelect.value = state.mode;
       tagsInput.value = state.tags;
@@ -1367,6 +1321,11 @@ function renderApp(url) {
         state.pointerDeltaY = point.clientY - state.pointerStartY;
         state.pointerDeltaX = point.clientX - state.pointerStartX;
         if (!state.dragLocked) {
+          if (state.currentMedia && state.currentMedia.tagName === 'VIDEO' && Math.abs(state.pointerDeltaX) > DRAG_LOCK_THRESHOLD && Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
+            state.dragLocked = true;
+            state.horizontalScrubbing = true;
+            state.scrubStartTime = Number.isFinite(state.currentMedia.currentTime) ? state.currentMedia.currentTime : 0;
+          }
           if (Math.abs(state.pointerDeltaY) < DRAG_LOCK_THRESHOLD) return false;
           if (Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
             cancelPointerGesture();
@@ -1374,13 +1333,37 @@ function renderApp(url) {
           }
           state.dragLocked = true;
         }
+        if (state.horizontalScrubbing && state.currentMedia && Number.isFinite(state.currentMedia.duration) && state.currentMedia.duration > 0) {
+          const deltaSeconds = (state.pointerDeltaX / viewport.clientWidth) * state.currentMedia.duration;
+          const nextTime = Math.max(0, Math.min(state.currentMedia.duration, state.scrubStartTime + deltaSeconds));
+          state.currentMedia.currentTime = nextTime;
+          updateScrubHud(nextTime, state.currentMedia.duration);
+          return true;
+        }
         updateTrackForDrag(state.pointerDeltaY);
         return true;
       }
 
       function endGesture() {
         if (!state.touchActive) return;
+        if (state.horizontalScrubbing) {
+          state.horizontalScrubbing = false;
+          scrubHud.classList.remove('show');
+          cancelPointerGesture();
+          return;
+        }
         finalizeSwipe(state.pointerDeltaY, state.dragLocked);
+      }
+      function updateScrubHud(current, duration) {
+        scrubHud.classList.add('show');
+        scrubTime.textContent = formatClock(current) + ' / ' + formatClock(duration);
+        scrubBar.style.width = ((current / duration) * 100) + '%';
+      }
+      function formatClock(seconds) {
+        const total = Math.max(0, Math.floor(seconds || 0));
+        const m = Math.floor(total / 60);
+        const s = String(total % 60).padStart(2, '0');
+        return m + ':' + s;
       }
 
       function handlePointerDown(event) {
@@ -2215,8 +2198,7 @@ function renderApp(url) {
       }
 
       function updateMeta(post) {
-        postTitle.textContent = '#' + post.id;
-        postDescription.textContent = post.description + ' • Rating: ' + post.rating.toUpperCase() + ' • Score: ' + post.score;
+        postDescription.innerHTML = post.description.split(' • ')[0] + ' • <a href="' + post.sourceUrl + '" target="_blank" rel="noreferrer">View post</a>';
         sortBadge.textContent = (state.mode === 'score' ? 'Top score' : 'Trending') + (state.lastFeedSource === 'client-direct' ? ' • Direct' : '');
         counterBadge.textContent = (state.currentIndex + 1) + ' / ' + state.posts.length;
         openPostLink.href = post.sourceUrl;
