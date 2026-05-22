@@ -519,7 +519,7 @@ function renderApp(url) {
         inset: 0;
         display: grid;
         grid-template-rows: auto 1fr auto;
-        padding: var(--safe-top) 16px var(--safe-bottom);
+        padding: calc(var(--safe-top) + 70px) 16px var(--safe-bottom);
         z-index: 2;
         pointer-events: none;
       }
@@ -845,25 +845,46 @@ function renderApp(url) {
         white-space: nowrap;
         border: 0;
       }
-      .nav-toggle {
+      .app-header {
         position: absolute;
-        top: 14px;
-        left: 14px;
-        z-index: 9;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        height: calc(var(--safe-top) + 58px);
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        padding: 10px 14px 10px;
+        background: linear-gradient(180deg, rgba(8,8,10,.96), rgba(8,8,10,.62));
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        backdrop-filter: blur(14px);
       }
+      .frame-pill {
+        font-size: .82rem;
+        border: 1px solid var(--outline);
+        border-radius: 999px;
+        background: rgba(255,255,255,.08);
+        padding: 7px 12px;
+      }
+      .app-header-title { font-weight: 700; letter-spacing: .01em; }
+      .nav-toggle { z-index: 12; }
       .burger-menu {
         position: absolute;
-        top: 58px;
-        left: 14px;
-        z-index: 9;
-        border: 1px solid var(--outline);
-        background: var(--panel-strong);
-        border-radius: 14px;
-        padding: 8px;
-        min-width: 180px;
-        display: none;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: min(80vw, 290px);
+        z-index: 11;
+        border-right: 1px solid var(--outline);
+        background: rgba(12, 12, 16, 0.98);
+        padding: calc(var(--safe-top) + 74px) 12px 18px;
+        display: grid;
+        gap: 6px;
+        transform: translateX(-110%);
+        transition: transform 220ms ease;
       }
-      .burger-menu.open { display: grid; gap: 6px; }
+      .burger-menu.open { transform: translateX(0); }
       .burger-menu a {
         color: var(--text);
         text-decoration: none;
@@ -908,7 +929,11 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
-        <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+        <header class="app-header">
+          <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+          <div class="app-header-title">e621 Reels</div>
+          <div class="frame-pill">Reel frame</div>
+        </header>
         <nav class="burger-menu" id="burgerMenu">
           <a href="/" data-page-nav>Reels feed</a>
           <a href="/photos" data-page-nav>Photos grid</a>
@@ -1130,6 +1155,7 @@ function renderApp(url) {
       navToggleButton.addEventListener('click', (event) => {
         event.stopPropagation();
         burgerMenu.classList.toggle('open');
+        navToggleButton.setAttribute('aria-label', burgerMenu.classList.contains('open') ? 'Close navigation' : 'Open navigation');
       });
 
       function navigateWithTransition(href) {
@@ -2347,8 +2373,8 @@ function renderApp(url) {
 
 function renderPhotoGridPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
-  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/" data-page-nav>Reels feed</a><a href="/photos" data-page-nav>Photos grid</a><a href="/about" data-page-nav>About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}header{position:sticky;top:0;z-index:12;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.mode-pill{margin-left:auto;font-size:.8rem;padding:6px 10px;border:1px solid rgba(255,255,255,.18);border-radius:999px;background:rgba(255,255,255,.06)}.menu{position:fixed;left:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-right:1px solid rgba(255,255,255,.18);transform:translateX(-110%);transition:transform .22s ease;z-index:20}.menu.open{transform:translateX(0)}.menu a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.menu a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
+  <body><nav class="menu" id="menu"><a href="/" data-page-nav>Reels feed</a><a href="/photos" data-page-nav>Photos grid</a><a href="/about" data-page-nav>About</a></nav><div class="frame"><header><button class="action" id="menuBtn">☰</button><strong>Infinite Photo Grid</strong><span class="mode-pill">Photo frame</span></header><main class="grid" id="grid"></main>
   <div class="status" id="status">Loading photos…</div>
   <pre class="error" id="errorBox" hidden></pre>
   <div class="lightbox" id="lightbox"><img id="lightboxImage" alt="Expanded image"/><div class="credit" id="lightboxCredit"></div></div>
@@ -2367,7 +2393,7 @@ function renderPhotoGridPage() {
   document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')lightbox.classList.remove('open');if(event.key==='ArrowDown'||event.key==='ArrowRight')moveLightbox(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')moveLightbox(-1);});
   lightbox.addEventListener('touchstart',(event)=>{touchStartY=event.touches[0].clientY;},{passive:true});
   lightbox.addEventListener('touchend',(event)=>{const deltaY=event.changedTouches[0].clientY-touchStartY;if(Math.abs(deltaY)<40)return;if(deltaY<0)moveLightbox(-1);if(deltaY>0)moveLightbox(1);},{passive:true});
-  const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></body></html>`;
+  const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></div></body></html>`;
 }
 
 function renderAboutPage() {
