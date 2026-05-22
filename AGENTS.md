@@ -84,3 +84,36 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22 05:03 UTC: Updated reel meta rendering to present artist-focused credit text with inline “View post” link, matching photo-mode credit intent.
 - 2026-05-22 05:03 UTC: Implemented horizontal video scrubbing during side drag, including a transient scrub HUD with current time / total duration and progress bar; vertical drag behavior remains reel navigation.
 - 2026-05-22 05:03 UTC: Added hidden compatibility nodes for legacy element IDs so existing script wiring remains stable while UI is visually simplified.
+
+## Summary title: Global shared header + top-right burger nav unification
+
+### Summarized context read
+- Reviewed `renderApp`, `renderPhotoGridPage`, and `renderAboutPage` page-shell HTML/CSS/JS in `src/worker.js` to identify where page-level navigation was duplicated or missing.
+- Reviewed existing page transition interception logic (`data-page-nav` click handling with View Transitions fallback) to keep same-tab smooth navigation behavior.
+
+### Summarized thinking
+- A single common top-right header pattern on every page reduces per-page branching and keeps navigation predictable.
+- Reusing the existing `data-page-nav` transition pattern keeps UX continuity while avoiding additional routing complexity.
+- Keeping menu markup lightweight and directly server-rendered per page preserves performance and avoids extra network fetches for nav.
+
+### Summarized changes with dates
+- 2026-05-22 05:14 UTC: Added a shared top-right burger-style header/navigation treatment to reel and about pages so all main pages expose Reels/Photos/About from the same position.
+- 2026-05-22 05:14 UTC: Kept same-tab left-click transition behavior for global menu links (View Transitions API with fade fallback).
+- 2026-05-22 05:14 UTC: Preserved server-rendered navigation output for simplicity/performance with no additional client fetch step.
+
+## Summary title: Global nav componentization + photo legacy menu removal
+
+### Summarized context read
+- Reviewed the latest `src/worker.js` render output for reels, photos, and about pages to confirm where the previous menu wiring diverged.
+- Verified photo page still had the older local menu/header implementation (`#menu`, `#menuBtn`) alongside new global navigation intent.
+- Reviewed prior global menu injection points and found duplicated per-page logic rather than a single shared render/script source.
+
+### Summarized thinking
+- The menu click issue is best resolved by moving interaction logic into one shared script generator so behavior cannot drift by page.
+- To avoid future misses, header markup should be produced by one shared render helper and reused by all pages.
+- Removing photo-page legacy menu/header avoids conflicting controls and ensures only one authoritative nav path remains.
+
+### Summarized changes with dates
+- 2026-05-22 05:19 UTC: Refactored global navigation into shared `renderGlobalHeader(...)` + `renderGlobalHeaderScript()` helpers reused by reels, photos, and about pages.
+- 2026-05-22 05:19 UTC: Removed legacy photo-page menu/header wiring (`#menu`, `#menuBtn`, and related page-local handlers) and switched photos to the shared global menu.
+- 2026-05-22 05:19 UTC: Standardized menu open/close and same-tab transition navigation behavior through one shared script source to prevent page-by-page drift.
