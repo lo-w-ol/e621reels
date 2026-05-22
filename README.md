@@ -26,6 +26,8 @@ npm run deploy
 
 ## Notes
 
-- The browser now requests `https://e621.net/posts.json` directly by default so visitor traffic goes straight to e621, and only falls back to `/api/posts` if direct requests fail (for example due to temporary CORS or network issues).
-- Browser JavaScript cannot set a custom `User-Agent` header, so direct requests always use the visitor's normal browser user agent. The Worker fallback path still sends the descriptive `User-Agent` configured in `src/worker.js`.
+- The browser now requests `https://e621.net/posts.json` directly by default so visitor traffic goes straight to e621, and with no client-side fallback through this Worker API.
+- Browser JavaScript cannot set a custom `User-Agent` header, so direct requests always use the visitor's normal browser user agent. This app avoids client→Worker API relay paths for feed and autocomplete requests.
 - e621 requires a descriptive `User-Agent` for server-side API usage. Update the placeholder contact in `src/worker.js` before production deployment.
+
+- A dedicated `/privacy` page explains direct-to-e621 data flow and first-party privacy scope.
