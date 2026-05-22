@@ -84,3 +84,19 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22 05:03 UTC: Updated reel meta rendering to present artist-focused credit text with inline “View post” link, matching photo-mode credit intent.
 - 2026-05-22 05:03 UTC: Implemented horizontal video scrubbing during side drag, including a transient scrub HUD with current time / total duration and progress bar; vertical drag behavior remains reel navigation.
 - 2026-05-22 05:03 UTC: Added hidden compatibility nodes for legacy element IDs so existing script wiring remains stable while UI is visually simplified.
+
+## Summary title: Global shared header + top-right burger nav unification
+
+### Summarized context read
+- Reviewed `renderApp`, `renderPhotoGridPage`, and `renderAboutPage` page-shell HTML/CSS/JS in `src/worker.js` to identify where page-level navigation was duplicated or missing.
+- Reviewed existing page transition interception logic (`data-page-nav` click handling with View Transitions fallback) to keep same-tab smooth navigation behavior.
+
+### Summarized thinking
+- A single common top-right header pattern on every page reduces per-page branching and keeps navigation predictable.
+- Reusing the existing `data-page-nav` transition pattern keeps UX continuity while avoiding additional routing complexity.
+- Keeping menu markup lightweight and directly server-rendered per page preserves performance and avoids extra network fetches for nav.
+
+### Summarized changes with dates
+- 2026-05-22 05:14 UTC: Added a shared top-right burger-style header/navigation treatment to reel and about pages so all main pages expose Reels/Photos/About from the same position.
+- 2026-05-22 05:14 UTC: Kept same-tab left-click transition behavior for global menu links (View Transitions API with fade fallback).
+- 2026-05-22 05:14 UTC: Preserved server-rendered navigation output for simplicity/performance with no additional client fetch step.
