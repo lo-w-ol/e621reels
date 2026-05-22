@@ -8,6 +8,7 @@ const IMAGE_MEDIA = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const SUPPORTED_MEDIA = new Set([...VIDEO_MEDIA, ...IMAGE_MEDIA]);
 const UPSTREAM_ERROR_PREVIEW_LIMIT = 400;
 const TAG_AUTOCOMPLETE_LIMIT = 8;
+const IMAGE_PAGE_SEARCH_LIMIT = 6;
 const RATIO_FILTER_TAGS = {
   vertical: 'ratio:<1',
   landscape: 'ratio:>1',
@@ -88,15 +89,11 @@ async function handlePosts(request, url) {
   const apiTags = [
     mode === 'score' ? 'order:score' : 'order:rank',
     ...(mediaMode === 'reel' ? BASE_TAGS : []),
+    ...(mediaMode === 'image' ? ['-animated'] : []),
     ...rawTags,
     ...(requestedRating ? ['rating:' + requestedRating] : []),
     ...(requestedRatio ? [RATIO_FILTER_TAGS[requestedRatio]] : []),
   ].join(' ');
-
-  const upstream = new URL(E621_API);
-  upstream.searchParams.set('limit', String(PAGE_SIZE));
-  upstream.searchParams.set('page', String(page));
-  upstream.searchParams.set('tags', apiTags);
 
   const requestMeta = {
     mode,
@@ -104,54 +101,66 @@ async function handlePosts(request, url) {
     tags: rawTags,
     rating: requestedRating,
     ratio: requestedRatio,
-    upstream: upstream.toString(),
+    upstream: E621_API,
     ray: request.headers.get('cf-ray') || null,
     colo: request.cf?.colo || null,
   };
 
   try {
-    const response = await fetch(upstream, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': USER_AGENT,
-      },
-      cf: {
-        cacheTtl: 120,
-        cacheEverything: false,
-      },
-    });
+    const pagesToTry = mediaMode === 'image' ? IMAGE_PAGE_SEARCH_LIMIT : 1;
+    const posts = [];
+    for (let pageOffset = 0; pageOffset < pagesToTry; pageOffset++) {
+      const upstream = new URL(E621_API);
+      upstream.searchParams.set('limit', String(PAGE_SIZE));
+      upstream.searchParams.set('page', String(page + pageOffset));
+      upstream.searchParams.set('tags', apiTags);
 
-    if (!response.ok) {
-      const upstreamBody = trimForLog(await response.text());
-      console.error('e621 upstream returned a non-OK response', {
-        ...requestMeta,
-        upstreamStatus: response.status,
-        upstreamStatusText: response.statusText,
-        upstreamBody,
+      const response = await fetch(upstream, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
+        },
+        cf: {
+          cacheTtl: 120,
+          cacheEverything: false,
+        },
       });
 
-      return json(
-        {
-          error: 'Failed to fetch from e621',
-          status: response.status,
+      if (!response.ok) {
+        const upstreamBody = trimForLog(await response.text());
+        console.error('e621 upstream returned a non-OK response', {
+          ...requestMeta,
+          upstream: upstream.toString(),
+          upstreamStatus: response.status,
           upstreamStatusText: response.statusText,
-          details: upstreamBody,
-          requestMeta,
-        },
-        502,
-      );
-    }
+          upstreamBody,
+        });
 
-    const data = await response.json();
-    const posts = Array.isArray(data.posts)
-      ? data.posts
-          .filter((post) => {
-            const ext = String(post?.file?.ext || '').toLowerCase();
-            if (!post?.file?.url || !SUPPORTED_MEDIA.has(ext)) return false;
-            return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
-          })
-          .map((post) => mapPost(post))
-      : [];
+        return json(
+          {
+            error: 'Failed to fetch from e621',
+            status: response.status,
+            upstreamStatusText: response.statusText,
+            details: upstreamBody,
+            requestMeta,
+          },
+          502,
+        );
+      }
+
+      const data = await response.json();
+      const pagePosts = Array.isArray(data.posts)
+        ? data.posts
+            .filter((post) => {
+              const ext = String(post?.file?.ext || '').toLowerCase();
+              if (!post?.file?.url || !SUPPORTED_MEDIA.has(ext)) return false;
+              return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
+            })
+            .map((post) => mapPost(post))
+        : [];
+      posts.push(...pagePosts);
+      if (posts.length >= PAGE_SIZE || mediaMode !== 'image') break;
+    }
 
     return json({
       mode,
@@ -159,7 +168,7 @@ async function handlePosts(request, url) {
       tags: rawTags,
       rating: requestedRating,
       ratio: requestedRatio,
-      posts,
+      posts: posts.slice(0, PAGE_SIZE),
       source: 'worker',
     });
   } catch (error) {
