@@ -869,9 +869,9 @@ function renderApp(url) {
       <main class="app" id="appRoot">
         <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
         <nav class="burger-menu" id="burgerMenu">
-          <a href="/">Reels feed</a>
-          <a href="/photos">Photos grid</a>
-          <a href="/about">About</a>
+          <a href="/" data-page-nav>Reels feed</a>
+          <a href="/photos" data-page-nav>Photos grid</a>
+          <a href="/about" data-page-nav>About</a>
         </nav>
         <div class="progress"><div id="progressBar"></div></div>
         <div class="viewport" id="viewport">
@@ -1089,6 +1089,35 @@ function renderApp(url) {
       navToggleButton.addEventListener('click', (event) => {
         event.stopPropagation();
         burgerMenu.classList.toggle('open');
+      });
+
+      function navigateWithTransition(href) {
+        if (!href) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          window.location.href = href;
+          return;
+        }
+        const go = () => {
+          if (document.startViewTransition) {
+            document.startViewTransition(() => {
+              window.location.href = href;
+            });
+            return;
+          }
+          document.body.classList.add('page-transitioning');
+          window.setTimeout(() => {
+            window.location.href = href;
+          }, 180);
+        };
+        window.requestAnimationFrame(go);
+      }
+
+      document.querySelectorAll('a[data-page-nav]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+          if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          navigateWithTransition(link.href);
+        });
       });
 
       toggleFiltersButton.addEventListener('click', () => {
@@ -2270,12 +2299,12 @@ function renderApp(url) {
 
 function renderPhotoGridPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
-  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/">Reels feed</a><a href="/photos">Photos grid</a><a href="/about">About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
+  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/" data-page-nav>Reels feed</a><a href="/photos" data-page-nav>Photos grid</a><a href="/about" data-page-nav>About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
   <div class="status" id="status">Loading photos…</div>
   <pre class="error" id="errorBox" hidden></pre>
   <div class="lightbox" id="lightbox"><img id="lightboxImage" alt="Expanded image"/><div class="credit" id="lightboxCredit"></div></div>
-  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));
+  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));const goPage=(href)=>{if(!href)return;if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.location.href=href;return;}if(document.startViewTransition){document.startViewTransition(()=>{window.location.href=href});return;}document.body.classList.add('page-transitioning');setTimeout(()=>{window.location.href=href},180);};document.querySelectorAll('a[data-page-nav]').forEach((a)=>a.addEventListener('click',(e)=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();goPage(a.href);}));
   const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxImage=document.getElementById('lightboxImage');const lightboxCredit=document.getElementById('lightboxCredit');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;
   function showError(detail){errorBox.hidden=false;errorBox.textContent=detail}
   function photoTagsFromUrl(){const url=new URL(window.location.href);const raw=(url.searchParams.get('tags')||'').trim().split(/\\s+/).filter(Boolean);const rating=(url.searchParams.get('rating')||'').trim().toLowerCase();const ratio=(url.searchParams.get('ratio')||'').trim().toLowerCase();const tags=['order:score','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}
@@ -2294,7 +2323,7 @@ function renderPhotoGridPage() {
 }
 
 function renderAboutPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}a{color:#ff73af}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}p{line-height:1.55}</style></head><body><div class="card"><p><a href="/">← Back to Reels</a></p><h1>About this app</h1><p>This site is 100% AI-coded and built as an open source experiment. The purpose of the project is to explore what can be made with AI-assisted development, while keeping the result transparent, reusable and freely available.</p><p>I do not claim ownership over the underlying AI-generated code, third-party APIs, external services, or any platform data used by this site. This project is intended to be used as a learning resource, source reference, template, remix, or starting point for anyone who wants to build something similar. My view is that if something is made entirely through AI-generated code, it should be shared freely for public use and the general good.</p><p>That said, this position does not extend to AI-generated art. I believe AI-generated art is harmful, disrespectful to working artists, and a stain on creative communities globally. Code and technical scaffolding can be freely shared and reused; the exploitation of artists’ work without consent is a separate issue and should be treated with serious criticism.</p><p>This project is 100% open source. You are free to inspect it, learn from it, fork it, modify it, improve it, or use it as a base for your own work. View the source on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p><p>Use the burger menu on each page to switch between Reels, Photos, and this About page.</p></div></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}a{color:#ff73af}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}p{line-height:1.55}body.page-transitioning{opacity:0;transition:opacity .22s ease}</style></head><body><div class="card"><p><a href="/" data-page-nav>← Back to Reels</a></p><h1>About this app</h1><p>This site is 100% AI-coded and built as an open source experiment. The purpose of the project is to explore what can be made with AI-assisted development, while keeping the result transparent, reusable and freely available.</p><p>I do not claim ownership over the underlying AI-generated code, third-party APIs, external services, or any platform data used by this site. This project is intended to be used as a learning resource, source reference, template, remix, or starting point for anyone who wants to build something similar. My view is that if something is made entirely through AI-generated code, it should be shared freely for public use and the general good.</p><p>That said, this position does not extend to AI-generated art. I believe AI-generated art is harmful, disrespectful to working artists, and a stain on creative communities globally. Code and technical scaffolding can be freely shared and reused; the exploitation of artists’ work without consent is a separate issue and should be treated with serious criticism.</p><p>This project is 100% open source. You are free to inspect it, learn from it, fork it, modify it, improve it, or use it as a base for your own work. View the source on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p><p>Use the burger menu on each page to switch between Reels, Photos, and this About page.</p></div><script>const back=document.querySelector('a[data-page-nav]');if(back){back.addEventListener('click',(e)=>{if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.location.href=back.href;return;}if(document.startViewTransition){document.startViewTransition(()=>{window.location.href=back.href});return;}document.body.classList.add('page-transitioning');setTimeout(()=>{window.location.href=back.href},180);});}</script></body></html>`;
 }
 
 
