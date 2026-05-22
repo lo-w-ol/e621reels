@@ -1,15 +1,19 @@
 const E621_API = 'https://e621.net/posts.json';
 const E621_TAG_AUTOCOMPLETE_API = 'https://e621.net/tags/autocomplete.json';
-const USER_AGENT = 'e621reels/0.1.0 (Cloudflare Worker demo; contact: admin@example.com)';
+const USER_AGENT = 'FurryReel/1.0 (contact: support@furryreel.com)';
 const PAGE_SIZE = 24;
 const BASE_TAGS = ['animated'];
-const SUPPORTED_MEDIA = new Set(['webm', 'mp4', 'gif']);
+const VIDEO_MEDIA = new Set(['webm', 'mp4', 'gif']);
+const IMAGE_MEDIA = new Set(['jpg', 'jpeg', 'png', 'webp']);
+const SUPPORTED_MEDIA = new Set([...VIDEO_MEDIA, ...IMAGE_MEDIA]);
 const UPSTREAM_ERROR_PREVIEW_LIMIT = 400;
 const TAG_AUTOCOMPLETE_LIMIT = 8;
+const UPSTREAM_COOLDOWN_MS = 1100;
 const RATIO_FILTER_TAGS = {
   vertical: 'ratio:<1',
   landscape: 'ratio:>1',
 };
+let lastUpstreamRequestAt = 0;
 
 export default {
   async fetch(request) {
@@ -41,6 +45,24 @@ export default {
       });
     }
 
+    if (url.pathname === '/photos') {
+      return new Response(renderPhotoGridPage(url), {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
+    if (url.pathname === '/about') {
+      return new Response(renderAboutPage(), {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(renderApp(url), {
         headers: {
@@ -64,18 +86,14 @@ async function handlePosts(request, url) {
   const rawTags = sanitizeTags(url.searchParams.get('tags') || '');
   const requestedRating = sanitizeRating(url.searchParams.get('rating'));
   const requestedRatio = sanitizeRatioFilter(url.searchParams.get('ratio'));
+  const mediaMode = url.searchParams.get('media') === 'image' ? 'image' : 'reel';
   const apiTags = [
     mode === 'score' ? 'order:score' : 'order:rank',
-    ...BASE_TAGS,
+    ...(mediaMode === 'reel' ? BASE_TAGS : []),
     ...rawTags,
     ...(requestedRating ? ['rating:' + requestedRating] : []),
     ...(requestedRatio ? [RATIO_FILTER_TAGS[requestedRatio]] : []),
   ].join(' ');
-
-  const upstream = new URL(E621_API);
-  upstream.searchParams.set('limit', String(PAGE_SIZE));
-  upstream.searchParams.set('page', String(page));
-  upstream.searchParams.set('tags', apiTags);
 
   const requestMeta = {
     mode,
@@ -83,50 +101,70 @@ async function handlePosts(request, url) {
     tags: rawTags,
     rating: requestedRating,
     ratio: requestedRatio,
-    upstream: upstream.toString(),
+    upstream: E621_API,
     ray: request.headers.get('cf-ray') || null,
     colo: request.cf?.colo || null,
   };
 
   try {
-    const response = await fetch(upstream, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': USER_AGENT,
-      },
-      cf: {
-        cacheTtl: 120,
-        cacheEverything: false,
-      },
-    });
+    const pagesToTry = 1;
+    const posts = [];
+    for (let pageOffset = 0; pageOffset < pagesToTry; pageOffset++) {
+      const upstream = new URL(E621_API);
+      upstream.searchParams.set('limit', String(PAGE_SIZE));
+      upstream.searchParams.set('page', String(page + pageOffset));
+      upstream.searchParams.set('tags', apiTags);
+      upstream.searchParams.set('_client', USER_AGENT);
 
-    if (!response.ok) {
-      const upstreamBody = trimForLog(await response.text());
-      console.error('e621 upstream returned a non-OK response', {
-        ...requestMeta,
-        upstreamStatus: response.status,
-        upstreamStatusText: response.statusText,
-        upstreamBody,
+      await waitForUpstreamSlot();
+
+      const response = await fetch(upstream, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
+        },
+        cf: {
+          cacheTtl: 120,
+          cacheEverything: false,
+        },
       });
 
-      return json(
-        {
-          error: 'Failed to fetch from e621',
-          status: response.status,
+      if (!response.ok) {
+        const upstreamBody = trimForLog(await response.text());
+        console.error('e621 upstream returned a non-OK response', {
+          ...requestMeta,
+          upstream: upstream.toString(),
+          upstreamStatus: response.status,
           upstreamStatusText: response.statusText,
-          details: upstreamBody,
-          requestMeta,
-        },
-        502,
-      );
-    }
+          upstreamBody,
+        });
 
-    const data = await response.json();
-    const posts = Array.isArray(data.posts)
-      ? data.posts
-          .filter((post) => post?.file?.url && SUPPORTED_MEDIA.has(String(post.file.ext || '').toLowerCase()))
-          .map((post) => mapPost(post))
-      : [];
+        return json(
+          {
+            error: 'Failed to fetch from e621',
+            status: response.status,
+            upstreamStatusText: response.statusText,
+            details: upstreamBody,
+            requestMeta,
+          },
+          502,
+        );
+      }
+
+      const data = await response.json();
+      const pagePosts = Array.isArray(data.posts)
+        ? data.posts
+            .filter((post) => {
+              const ext = String(post?.file?.ext || '').toLowerCase();
+              const hasRenderableMedia = Boolean(post?.file?.url || post?.sample?.url || post?.preview?.url);
+              if (!hasRenderableMedia || !SUPPORTED_MEDIA.has(ext)) return false;
+              return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
+            })
+            .map((post) => mapPost(post))
+        : [];
+      posts.push(...pagePosts);
+      if (posts.length >= PAGE_SIZE || mediaMode !== 'image') break;
+    }
 
     return json({
       mode,
@@ -134,7 +172,7 @@ async function handlePosts(request, url) {
       tags: rawTags,
       rating: requestedRating,
       ratio: requestedRatio,
-      posts,
+      posts: posts.slice(0, PAGE_SIZE),
       source: 'worker',
     });
   } catch (error) {
@@ -249,6 +287,19 @@ function trimForLog(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, UPSTREAM_ERROR_PREVIEW_LIMIT);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForUpstreamSlot() {
+  const now = Date.now();
+  const waitMs = Math.max(0, lastUpstreamRequestAt + UPSTREAM_COOLDOWN_MS - now);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  lastUpstreamRequestAt = Date.now();
+}
+
 function mapPost(post) {
   const ext = String(post.file.ext || '').toLowerCase();
   const width = post.file?.width || post.sample?.width || 0;
@@ -260,14 +311,14 @@ function mapPost(post) {
   return {
     id: post.id,
     ext,
-    type: ['webm', 'mp4'].includes(ext) ? 'video' : 'image',
+    type: VIDEO_MEDIA.has(ext) ? 'video' : 'image',
     score: post.score?.total || 0,
     rating: post.rating || 'u',
     width,
     height,
     createdAt: post.created_at,
-    mediaUrl: post.file.url,
-    previewUrl: post.preview?.url || post.sample?.url || post.file.url,
+    mediaUrl: post.file.url || post.sample?.url || post.preview?.url || '',
+    previewUrl: post.preview?.url || post.sample?.url || post.file.url || '',
     sourceUrl: 'https://e621.net/posts/' + post.id,
     description: [
       artist.length ? 'Artist: ' + artist.join(', ') : 'Artist unknown',
@@ -753,6 +804,32 @@ function renderApp(url) {
         white-space: nowrap;
         border: 0;
       }
+      .nav-toggle {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        z-index: 9;
+      }
+      .burger-menu {
+        position: absolute;
+        top: 58px;
+        left: 14px;
+        z-index: 9;
+        border: 1px solid var(--outline);
+        background: var(--panel-strong);
+        border-radius: 14px;
+        padding: 8px;
+        min-width: 180px;
+        display: none;
+      }
+      .burger-menu.open { display: grid; gap: 6px; }
+      .burger-menu a {
+        color: var(--text);
+        text-decoration: none;
+        padding: 8px 10px;
+        border-radius: 10px;
+      }
+      .burger-menu a:hover { background: rgba(255,255,255,0.08); }
       @media (orientation: landscape) and (max-width: 960px) {
         .shell {
           padding: 0;
@@ -790,6 +867,12 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
+        <button class="action-button nav-toggle" id="navToggleButton" type="button" aria-label="Open navigation">☰</button>
+        <nav class="burger-menu" id="burgerMenu">
+          <a href="/">Reels feed</a>
+          <a href="/photos">Photos grid</a>
+          <a href="/about">About</a>
+        </nav>
         <div class="progress"><div id="progressBar"></div></div>
         <div class="viewport" id="viewport">
           <div class="reel-track" id="reelTrack"></div>
@@ -993,6 +1076,8 @@ function renderApp(url) {
       const hideTagsToggle = document.getElementById('hideTagsToggle');
       const tagAutocomplete = document.getElementById('tagAutocomplete');
       const tagAutocompleteList = document.getElementById('tagAutocompleteList');
+      const navToggleButton = document.getElementById('navToggleButton');
+      const burgerMenu = document.getElementById('burgerMenu');
 
       modeSelect.value = state.mode;
       tagsInput.value = state.tags;
@@ -1000,6 +1085,11 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
+
+      navToggleButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        burgerMenu.classList.toggle('open');
+      });
 
       toggleFiltersButton.addEventListener('click', () => {
         const nextOpen = !filterPanel.classList.contains('open');
@@ -1094,6 +1184,9 @@ function renderApp(url) {
       document.addEventListener('click', (event) => {
         if (!filterPanel.contains(event.target) && !toggleFiltersButton.contains(event.target)) {
           closeSettings();
+        }
+        if (!burgerMenu.contains(event.target) && !navToggleButton.contains(event.target)) {
+          burgerMenu.classList.remove('open');
         }
         if (!filterPanel.contains(event.target)) {
           closeTagAutocomplete();
@@ -2172,6 +2265,35 @@ function renderApp(url) {
     </script>
   </body>
 </html>`;
+}
+
+function renderPhotoGridPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(12,12,14,.92);backdrop-filter:blur(10px)}.action{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;padding:8px 10px}.menu{position:absolute;left:16px;top:54px;display:none;flex-direction:column;background:#141418;border:1px solid rgba(255,255,255,.18);border-radius:12px;min-width:160px}.menu.open{display:flex}.menu a{color:#fff;text-decoration:none;padding:10px 12px}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none}.lightbox.open{display:block}.lightbox img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem}.credit a{color:#fff}</style></head>
+  <body><header><button class="action" id="menuBtn">☰</button><nav class="menu" id="menu"><a href="/">Reels feed</a><a href="/photos">Photos grid</a><a href="/about">About</a></nav><strong>Infinite Photo Grid</strong></header><main class="grid" id="grid"></main>
+  <div class="status" id="status">Loading photos…</div>
+  <pre class="error" id="errorBox" hidden></pre>
+  <div class="lightbox" id="lightbox"><img id="lightboxImage" alt="Expanded image"/><div class="credit" id="lightboxCredit"></div></div>
+  <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));
+  const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxImage=document.getElementById('lightboxImage');const lightboxCredit=document.getElementById('lightboxCredit');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;
+  function showError(detail){errorBox.hidden=false;errorBox.textContent=detail}
+  function photoTagsFromUrl(){const url=new URL(window.location.href);const raw=(url.searchParams.get('tags')||'').trim().split(/\\s+/).filter(Boolean);const rating=(url.searchParams.get('rating')||'').trim().toLowerCase();const ratio=(url.searchParams.get('ratio')||'').trim().toLowerCase();const tags=['order:score','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}
+  function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return {id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}
+  function openLightbox(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const p=allPosts[index];lightboxImage.src=p.mediaUrl||p.previewUrl;lightboxCredit.innerHTML='Artist: '+p.artistText+' • <a href=\"'+p.sourceUrl+'\" target=\"_blank\" rel=\"noreferrer\">View post</a>';lightbox.classList.add('open');}
+  function moveLightbox(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length)return;openLightbox(next);}
+  function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&& (p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}
+  async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){const msg=String(err&&err.message?err.message:err);console.error('photo-grid load failed',{upstreamUrl:upstreamUrl.toString(),error:msg});status.textContent=msg.includes('http=403')?'e621 blocked this browser request (403). Retrying may work later.':'Could not load photos right now.';showError(msg);}finally{loading=false;}}
+  function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}
+  grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});
+  lightbox.addEventListener('click',()=>{lightbox.classList.remove('open');});
+  document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')lightbox.classList.remove('open');if(event.key==='ArrowDown'||event.key==='ArrowRight')moveLightbox(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')moveLightbox(-1);});
+  lightbox.addEventListener('touchstart',(event)=>{touchStartY=event.touches[0].clientY;},{passive:true});
+  lightbox.addEventListener('touchend',(event)=>{const deltaY=event.changedTouches[0].clientY-touchStartY;if(Math.abs(deltaY)<40)return;if(deltaY<0)moveLightbox(-1);if(deltaY>0)moveLightbox(1);},{passive:true});
+  const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></body></html>`;
+}
+
+function renderAboutPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}a{color:#ff73af}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}p{line-height:1.55}</style></head><body><div class="card"><p><a href="/">← Back to Reels</a></p><h1>About this app</h1><p>This site is 100% AI-coded and built as an open source experiment. The purpose of the project is to explore what can be made with AI-assisted development, while keeping the result transparent, reusable and freely available.</p><p>I do not claim ownership over the underlying AI-generated code, third-party APIs, external services, or any platform data used by this site. This project is intended to be used as a learning resource, source reference, template, remix, or starting point for anyone who wants to build something similar. My view is that if something is made entirely through AI-generated code, it should be shared freely for public use and the general good.</p><p>That said, this position does not extend to AI-generated art. I believe AI-generated art is harmful, disrespectful to working artists, and a stain on creative communities globally. Code and technical scaffolding can be freely shared and reused; the exploitation of artists’ work without consent is a separate issue and should be treated with serious criticism.</p><p>This project is 100% open source. You are free to inspect it, learn from it, fork it, modify it, improve it, or use it as a base for your own work.</p><p>Use the burger menu on each page to switch between Reels, Photos, and this About page.</p></div></body></html>`;
 }
 
 
