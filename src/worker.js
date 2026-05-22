@@ -1422,42 +1422,47 @@ function renderApp(url) {
       }
 
       async function fetchTagAutocomplete(query) {
-        const workerUrl = '/api/tags/autocomplete?q=' + encodeURIComponent(query);
+        const upstreamUrl = new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);
         try {
-          const workerResponse = await fetch(workerUrl);
-          const workerPayload = await parseJsonSafely(workerResponse);
-          if (workerResponse.ok && workerPayload && Array.isArray(workerPayload.tags)) {
-            return workerPayload.tags;
+          upstreamUrl.searchParams.set('search[name_matches]', query + '*');
+          const response = await fetch(upstreamUrl.toString(), {
+            headers: { Accept: 'application/json' },
+          });
+          const payload = await parseJsonSafely(response);
+          if (!response.ok) {
+            throw createFetchError('Direct tag autocomplete failed', {
+              url: upstreamUrl.toString(),
+              status: response.status,
+              payload,
+            });
           }
-        } catch (error) {
-          console.warn('Worker tag autocomplete failed', error);
+          return Array.isArray(payload)
+            ? payload
+                .filter((tag) => tag && typeof tag.name === 'string')
+                .slice(0, TAG_AUTOCOMPLETE_LIMIT)
+                .map((tag) => ({
+                  id: tag.id || null,
+                  name: tag.name,
+                  category: Number.isFinite(tag.category) ? tag.category : null,
+                  postCount: Number.isFinite(tag.post_count) ? tag.post_count : 0,
+                  antecedentName: tag.antecedent_name || null,
+                }))
+            : [];
+        } catch (directError) {
+          console.warn('Direct tag autocomplete failed, trying worker fallback', directError);
         }
 
-        const upstreamUrl = new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);
-        upstreamUrl.searchParams.set('search[name_matches]', query + '*');
-        const response = await fetch(upstreamUrl.toString(), {
-          headers: { Accept: 'application/json' },
-        });
-        const payload = await parseJsonSafely(response);
-        if (!response.ok) {
-          throw createFetchError('Direct tag autocomplete failed', {
-            url: upstreamUrl.toString(),
-            status: response.status,
-            payload,
+        const workerUrl = '/api/tags/autocomplete?q=' + encodeURIComponent(query);
+        const workerResponse = await fetch(workerUrl);
+        const workerPayload = await parseJsonSafely(workerResponse);
+        if (!workerResponse.ok || !workerPayload || !Array.isArray(workerPayload.tags)) {
+          throw createFetchError('Worker tag autocomplete fallback failed', {
+            url: workerUrl,
+            status: workerResponse.status,
+            payload: workerPayload,
           });
         }
-        return Array.isArray(payload)
-          ? payload
-              .filter((tag) => tag && typeof tag.name === 'string')
-              .slice(0, TAG_AUTOCOMPLETE_LIMIT)
-              .map((tag) => ({
-                id: tag.id || null,
-                name: tag.name,
-                category: Number.isFinite(tag.category) ? tag.category : null,
-                postCount: Number.isFinite(tag.post_count) ? tag.post_count : 0,
-                antecedentName: tag.antecedent_name || null,
-              }))
-          : [];
+        return workerPayload.tags;
       }
 
       function handleAutocompleteKeydown(event) {
@@ -1615,7 +1620,7 @@ function renderApp(url) {
           if (state.ratio) params.set('ratio', state.ratio);
 
           console.info('[feed] requesting posts', {
-            sourcePreference: 'worker-first',
+            sourcePreference: 'client-direct-first',
             page: state.nextPage,
             mode: state.mode,
             tags: state.tags,
@@ -1623,7 +1628,7 @@ function renderApp(url) {
             ratio: state.ratio || null,
           });
 
-          const { data, source } = await fetchPostsWithFallback(params);
+          const { data, source } = await fetchPostsPreferDirect(params);
           const incoming = Array.isArray(data.posts) ? data.posts : [];
           state.lastFeedSource = source;
 
@@ -1659,34 +1664,30 @@ function renderApp(url) {
         }
       }
 
-      async function fetchPostsWithFallback(params) {
-        const workerUrl = '/api/posts?' + params.toString();
-        let workerError = null;
+      async function fetchPostsPreferDirect(params) {
+        try {
+          const directData = await fetchPostsDirectly(params, null);
+          return { data: directData, source: 'client-direct' };
+        } catch (directError) {
+          console.warn('[feed] direct request failed, trying worker fallback', directError);
+        }
 
+        const workerUrl = '/api/posts?' + params.toString();
         try {
           const workerResponse = await fetch(workerUrl);
           const workerPayload = await parseJsonSafely(workerResponse);
-
           if (!workerResponse.ok) {
-            workerError = createFetchError('Worker feed request failed', {
+            throw createFetchError('Worker feed fallback failed', {
               url: workerUrl,
               status: workerResponse.status,
               payload: workerPayload,
             });
-            console.warn('[feed] worker request failed', workerError.context);
-          } else {
-            return { data: workerPayload || {}, source: 'worker' };
           }
-        } catch (error) {
-          workerError = createFetchError('Worker feed request threw', {
-            url: workerUrl,
-            cause: error instanceof Error ? error.message : String(error),
-          });
-          console.warn('[feed] worker request threw', workerError.context);
+          return { data: workerPayload || {}, source: 'worker-fallback' };
+        } catch (workerError) {
+          console.error('[feed] worker fallback failed', workerError);
+          throw workerError;
         }
-
-        const directData = await fetchPostsDirectly(params, workerError);
-        return { data: directData, source: 'client-direct' };
       }
 
       async function fetchPostsDirectly(params, workerError) {
