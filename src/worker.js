@@ -1,6 +1,6 @@
 const E621_API = 'https://e621.net/posts.json';
 const E621_TAG_AUTOCOMPLETE_API = 'https://e621.net/tags/autocomplete.json';
-const USER_AGENT = 'furryreel/1.0 (by furryreel.com; contact: support@furryreel.com)';
+const USER_AGENT = 'FurryReel/1.0 (contact: support@furryreel.com)';
 const PAGE_SIZE = 24;
 const BASE_TAGS = ['animated'];
 const VIDEO_MEDIA = new Set(['webm', 'mp4', 'gif']);
@@ -8,10 +8,12 @@ const IMAGE_MEDIA = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const SUPPORTED_MEDIA = new Set([...VIDEO_MEDIA, ...IMAGE_MEDIA]);
 const UPSTREAM_ERROR_PREVIEW_LIMIT = 400;
 const TAG_AUTOCOMPLETE_LIMIT = 8;
+const UPSTREAM_COOLDOWN_MS = 1100;
 const RATIO_FILTER_TAGS = {
   vertical: 'ratio:<1',
   landscape: 'ratio:>1',
 };
+let lastUpstreamRequestAt = 0;
 
 export default {
   async fetch(request) {
@@ -88,7 +90,6 @@ async function handlePosts(request, url) {
   const apiTags = [
     mode === 'score' ? 'order:score' : 'order:rank',
     ...(mediaMode === 'reel' ? BASE_TAGS : []),
-    ...(mediaMode === 'image' ? ['-animated'] : []),
     ...rawTags,
     ...(requestedRating ? ['rating:' + requestedRating] : []),
     ...(requestedRatio ? [RATIO_FILTER_TAGS[requestedRatio]] : []),
@@ -110,9 +111,12 @@ async function handlePosts(request, url) {
     const posts = [];
     for (let pageOffset = 0; pageOffset < pagesToTry; pageOffset++) {
       const upstream = new URL(E621_API);
-      upstream.searchParams.set('limit', String(mediaMode === 'image' ? 80 : PAGE_SIZE));
+      upstream.searchParams.set('limit', String(PAGE_SIZE));
       upstream.searchParams.set('page', String(page + pageOffset));
       upstream.searchParams.set('tags', apiTags);
+      upstream.searchParams.set('_client', USER_AGENT);
+
+      await waitForUpstreamSlot();
 
       const response = await fetch(upstream, {
         headers: {
@@ -281,6 +285,19 @@ async function handleTagAutocomplete(request, url) {
 
 function trimForLog(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, UPSTREAM_ERROR_PREVIEW_LIMIT);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForUpstreamSlot() {
+  const now = Date.now();
+  const waitMs = Math.max(0, lastUpstreamRequestAt + UPSTREAM_COOLDOWN_MS - now);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  lastUpstreamRequestAt = Date.now();
 }
 
 function mapPost(post) {
@@ -2259,7 +2276,7 @@ function renderPhotoGridPage() {
   <script>const grid=document.getElementById('grid');const menuBtn=document.getElementById('menuBtn');const menu=document.getElementById('menu');menuBtn.onclick=(e)=>{e.stopPropagation();menu.classList.toggle('open')};document.addEventListener('click',()=>menu.classList.remove('open'));
   const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null;
   function showError(detail){errorBox.hidden=false;errorBox.textContent=detail}
-  function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&& (p.mediaUrl||p.previewUrl);if(!src)continue;const t=document.createElement('article');t.className='tile';const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}
+  function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&& (p.previewUrl||p.mediaUrl);if(!src)continue;const t=document.createElement('article');t.className='tile';const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}
   async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const requestUrl='/api/posts?media=image&mode=score&page='+page;try{const res=await fetch(requestUrl,{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse /api/posts response as JSON. status='+res.status+' '+res.statusText+' url='+requestUrl)}if(!res.ok){const serverDetail=payload&&payload.details?payload.details:'(none)';const upstreamStatus=payload&&payload.status?String(payload.status):'unknown';throw new Error('Feed error: http='+res.status+' upstream='+upstreamStatus+' details='+serverDetail+' request='+requestUrl)}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.filter((p)=>Boolean(p&&(p.mediaUrl||p.previewUrl)));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No photos were returned. Try refreshing in a moment.';showError('Debug: empty posts[] on first load\\nrequest='+requestUrl+'\\nresponse='+JSON.stringify(payload).slice(0,900));loading=false;return;}flushFromList(18);page++;}catch(err){const msg=String(err&&err.message?err.message:err);console.error('photo-grid load failed',{requestUrl,error:msg});status.textContent=msg.includes('upstream=403')?'Upstream blocked this request (403). Retrying may work later.':'Could not load photos right now.';showError(msg);}finally{loading=false;}}
   function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}
   const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></body></html>`;
