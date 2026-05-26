@@ -15,9 +15,9 @@ const BASE_TAGS = ['animated'];
 const VIDEO_MEDIA = new Set(['webm', 'mp4', 'gif']);
 const IMAGE_MEDIA = new Set(['jpg', 'jpeg', 'png', 'webp']);
 const SUPPORTED_MEDIA = new Set([...VIDEO_MEDIA, ...IMAGE_MEDIA]);
-const UPSTREAM_ERROR_PREVIEW_LIMIT = 400;
 const TAG_AUTOCOMPLETE_LIMIT = 8;
 const UPSTREAM_COOLDOWN_MS = 1100;
+const DEBUG_LOGS = false;
 const RATIO_FILTER_TAGS = {
   vertical: 'ratio:<1',
   landscape: 'ratio:>1',
@@ -25,9 +25,22 @@ const RATIO_FILTER_TAGS = {
 let lastUpstreamRequestAt = 0;
 
 export { handlePosts, handleTagAutocomplete };
+
+function publicApiError(message, status, request) {
+  return json({ error: message, status }, status, request);
+}
+
+function buildSafeLogMeta(request, extra = {}) {
+  return {
+    ray: request.headers.get('cf-ray') || null,
+    colo: request.cf?.colo || null,
+    ...extra,
+  };
+}
+
 async function handlePosts(request, url) {
   if (request.method !== 'GET') {
-    return json({ error: 'Method not allowed' }, 405);
+    return publicApiError('Method not allowed', 405, request);
   }
 
   const mode = url.searchParams.get('mode') === 'score' ? 'score' : 'trending';
@@ -44,76 +57,50 @@ async function handlePosts(request, url) {
     ...(requestedRatio ? [RATIO_FILTER_TAGS[requestedRatio]] : []),
   ].join(' ');
 
-  const requestMeta = {
-    mode,
-    page,
-    tags: rawTags,
-    rating: requestedRating,
-    ratio: requestedRatio,
-    upstream: E621_API,
-    ray: request.headers.get('cf-ray') || null,
-    colo: request.cf?.colo || null,
-  };
-
   try {
-    const pagesToTry = 1;
     const posts = [];
-    for (let pageOffset = 0; pageOffset < pagesToTry; pageOffset++) {
-      const upstream = new URL(E621_API);
-      upstream.searchParams.set('limit', String(PAGE_SIZE));
-      upstream.searchParams.set('page', String(page + pageOffset));
-      upstream.searchParams.set('tags', apiTags);
-      upstream.searchParams.set('_client', USER_AGENT);
+    const upstream = new URL(E621_API);
+    upstream.searchParams.set('limit', String(PAGE_SIZE));
+    upstream.searchParams.set('page', String(page));
+    upstream.searchParams.set('tags', apiTags);
+    upstream.searchParams.set('_client', USER_AGENT);
 
-      await waitForUpstreamSlot();
+    await waitForUpstreamSlot();
 
-      const response = await fetch(upstream, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': USER_AGENT,
-        },
-        cf: {
-          cacheTtl: 120,
-          cacheEverything: false,
-        },
-      });
+    const response = await fetch(upstream, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+      },
+      cf: {
+        cacheTtl: 120,
+        cacheEverything: false,
+      },
+    });
 
-      if (!response.ok) {
-        const upstreamBody = trimForLog(await response.text());
-        console.error('e621 upstream returned a non-OK response', {
-          ...requestMeta,
-          upstream: upstream.toString(),
-          upstreamStatus: response.status,
-          upstreamStatusText: response.statusText,
-          upstreamBody,
-        });
-
-        return json(
-          {
-            error: 'Failed to fetch from e621',
-            status: response.status,
-            upstreamStatusText: response.statusText,
-            details: upstreamBody,
-            requestMeta,
-          },
-          502,
-        );
-      }
-
-      const data = await response.json();
-      const pagePosts = Array.isArray(data.posts)
-        ? data.posts
-            .filter((post) => {
-              const ext = String(post?.file?.ext || '').toLowerCase();
-              const hasRenderableMedia = Boolean(post?.file?.url || post?.sample?.url || post?.preview?.url);
-              if (!hasRenderableMedia || !SUPPORTED_MEDIA.has(ext)) return false;
-              return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
-            })
-            .map((post) => mapPost(post))
-        : [];
-      posts.push(...pagePosts);
-      if (posts.length >= PAGE_SIZE || mediaMode !== 'image') break;
+    if (!response.ok) {
+      console.error('e621 upstream returned non-OK response', buildSafeLogMeta(request, {
+        endpoint: 'posts',
+        page,
+        mediaMode,
+        upstreamStatus: response.status,
+        upstreamStatusText: response.statusText,
+      }));
+      return publicApiError('Upstream content request failed', 502, request);
     }
+
+    const data = await response.json();
+    const pagePosts = Array.isArray(data.posts)
+      ? data.posts
+          .filter((post) => {
+            const ext = String(post?.file?.ext || '').toLowerCase();
+            const hasRenderableMedia = Boolean(post?.file?.url || post?.sample?.url || post?.preview?.url);
+            if (!hasRenderableMedia || !SUPPORTED_MEDIA.has(ext)) return false;
+            return mediaMode === 'image' ? IMAGE_MEDIA.has(ext) : VIDEO_MEDIA.has(ext);
+          })
+          .map((post) => mapPost(post))
+      : [];
+    posts.push(...pagePosts);
 
     return json({
       mode,
@@ -123,47 +110,34 @@ async function handlePosts(request, url) {
       ratio: requestedRatio,
       posts: posts.slice(0, PAGE_SIZE),
       source: 'worker',
-    });
+    }, 200, request);
   } catch (error) {
-    console.error('e621 upstream fetch threw an exception', {
-      ...requestMeta,
+    const logMeta = buildSafeLogMeta(request, {
+      endpoint: 'posts',
+      page,
+      mediaMode,
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : null,
     });
-
-    return json(
-      {
-        error: 'Failed to fetch from e621',
-        status: 0,
-        details: error instanceof Error ? error.message : String(error),
-        requestMeta,
-      },
-      502,
-    );
+    if (DEBUG_LOGS && error instanceof Error) {
+      logMeta.stack = error.stack;
+    }
+    console.error('e621 upstream fetch threw exception', logMeta);
+    return publicApiError('Upstream content request failed', 502, request);
   }
 }
 
 async function handleTagAutocomplete(request, url) {
   if (request.method !== 'GET') {
-    return json({ error: 'Method not allowed' }, 405);
+    return publicApiError('Method not allowed', 405, request);
   }
 
-  const rawQuery = String(url.searchParams.get('q') || '');
-  const query = sanitizeAutocompleteQuery(rawQuery);
-
+  const query = sanitizeAutocompleteQuery(String(url.searchParams.get('q') || ''));
   if (!query) {
-    return json({ query: '', tags: [] });
+    return json({ query: '', tags: [] }, 200, request);
   }
 
   const upstream = new URL(E621_TAG_AUTOCOMPLETE_API);
   upstream.searchParams.set('search[name_matches]', query + '*');
-
-  const requestMeta = {
-    query,
-    upstream: upstream.toString(),
-    ray: request.headers.get('cf-ray') || null,
-    colo: request.cf?.colo || null,
-  };
 
   try {
     const response = await fetch(upstream, {
@@ -178,24 +152,12 @@ async function handleTagAutocomplete(request, url) {
     });
 
     if (!response.ok) {
-      const upstreamBody = trimForLog(await response.text());
-      console.error('e621 tag autocomplete returned a non-OK response', {
-        ...requestMeta,
+      console.error('e621 tag autocomplete returned non-OK response', buildSafeLogMeta(request, {
+        endpoint: 'tags-autocomplete',
         upstreamStatus: response.status,
         upstreamStatusText: response.statusText,
-        upstreamBody,
-      });
-
-      return json(
-        {
-          error: 'Failed to fetch tag autocomplete',
-          status: response.status,
-          upstreamStatusText: response.statusText,
-          details: upstreamBody,
-          requestMeta,
-        },
-        502,
-      );
+      }));
+      return publicApiError('Upstream autocomplete request failed', 502, request);
     }
 
     const data = await response.json();
@@ -212,28 +174,18 @@ async function handleTagAutocomplete(request, url) {
           }))
       : [];
 
-    return json({ query, tags, source: 'worker' });
+    return json({ query, tags, source: 'worker' }, 200, request);
   } catch (error) {
-    console.error('e621 tag autocomplete threw an exception', {
-      ...requestMeta,
+    const logMeta = buildSafeLogMeta(request, {
+      endpoint: 'tags-autocomplete',
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : null,
     });
-
-    return json(
-      {
-        error: 'Failed to fetch tag autocomplete',
-        status: 0,
-        details: error instanceof Error ? error.message : String(error),
-        requestMeta,
-      },
-      502,
-    );
+    if (DEBUG_LOGS && error instanceof Error) {
+      logMeta.stack = error.stack;
+    }
+    console.error('e621 tag autocomplete threw exception', logMeta);
+    return publicApiError('Upstream autocomplete request failed', 502, request);
   }
-}
-
-function trimForLog(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, UPSTREAM_ERROR_PREVIEW_LIMIT);
 }
 
 function sleep(ms) {
@@ -278,4 +230,3 @@ function mapPost(post) {
     tags: [...artist.map((tag) => 'artist:' + tag), ...general],
   };
 }
-

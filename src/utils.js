@@ -46,13 +46,45 @@ export function sanitizeAutocompleteQuery(raw) {
     .slice(0, 64);
 }
 
-export function json(body, status = 200) {
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://furryreel.com',
+  'http://localhost:8787',
+  'http://127.0.0.1:8787',
+]);
+
+export function jsonHeaders(request = null) {
+  const headers = {
+    'content-type': 'application/json; charset=UTF-8',
+    'cache-control': 'no-store',
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'permissions-policy': "geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()",
+  };
+
+  // Same-origin frontend calls do not need CORS. This allowlist is only for controlled origins.
+  const origin = request?.headers?.get('origin');
+  if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
+    headers['access-control-allow-origin'] = origin;
+    headers.vary = 'Origin';
+  }
+
+  return headers;
+}
+
+export function htmlHeaders() {
+  return {
+    'content-type': 'text/html; charset=UTF-8',
+    'cache-control': 'no-store',
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'permissions-policy': "geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()",
+    'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://e621.net; img-src 'self' data: https://static1.e621.net https://static1.e926.net https://static.e621.net https://e621.net; media-src 'self' https://static1.e621.net https://static1.e926.net https://static.e621.net https://e621.net; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+  };
+}
+
+export function json(body, status = 200, request = null) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      'content-type': 'application/json; charset=UTF-8',
-      'cache-control': 'no-store',
-      'access-control-allow-origin': '*',
-    },
+    headers: jsonHeaders(request),
   });
 }
