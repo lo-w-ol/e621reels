@@ -137,3 +137,18 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-22 05:55 UTC: Added a new `/privacy` page detailing first-party privacy scope, direct e621 data flow, and no client→worker relay for feed/autocomplete.
 - 2026-05-22 05:55 UTC: Added Privacy navigation entry to the shared global header menu across pages.
 - 2026-05-22 05:55 UTC: Updated `README.md` notes to reflect direct-only client API behavior and the new privacy page.
+
+## Summary title: Privacy policy hardening with legal transparency notice
+
+### Summarized context read
+- Reviewed existing `/privacy` route and `renderPrivacyPage()` content in `src/worker.js` to confirm the page existed but was brief and mainly technical.
+- Reviewed prior AGENTS decision log entries documenting direct-to-e621 data flow so policy language remains aligned with implemented behavior.
+
+### Summarized thinking
+- User requested a stronger privacy policy intended to reduce legal exposure, so the safest change is to expand policy scope with clearer sections (controller scope, third-party processing, regional rights, children, updates, and legal disclaimer).
+- It is important to avoid false promises; therefore policy text should explicitly state it is not legal advice and cannot guarantee immunity from lawsuits.
+- Keep the implementation lightweight by updating only the existing privacy page renderer and preserving global navigation behavior.
+
+### Summarized changes with dates
+- 2026-05-26 23:22 UTC: Expanded the `/privacy` page into a fuller Privacy Policy with effective date, data practices, third-party disclosures, rights language, children section, updates section, and legal transparency disclaimer.
+- 2026-05-26 23:22 UTC: Updated privacy page title text to “Privacy Policy” to match user intent and legal-page semantics.
