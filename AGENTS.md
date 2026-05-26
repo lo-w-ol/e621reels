@@ -170,3 +170,24 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-26 23:39 UTC: Added `src/api.js` with `/api/posts` and `/api/tags/autocomplete` handler logic plus upstream throttling/mapping helpers.
 - 2026-05-26 23:40 UTC: Updated `src/worker.js` to import modular API + utility helpers while preserving existing routes and HTML renderers.
 - 2026-05-26 23:40 UTC: Added a short migration note in `README.md` documenting the structural split and no-behavior-change intent.
+
+## Summary title: Privacy/compliance hardening across API, headers, and client metadata handling
+
+### Summarized context read
+- Reviewed `src/api.js` error handling/logging paths for `/api/posts` and `/api/tags/autocomplete`.
+- Reviewed `src/utils.js` JSON helper and response headers behavior.
+- Reviewed `src/worker.js` client-side feed/photo scripts for sensitive console/error exposure, unsafe metadata rendering, and URL/history behavior.
+- Reviewed `README.md` and prior AGENTS entries to preserve direct-to-e621 architecture language and append-only decision-log format.
+
+### Summarized thinking
+- Risk reduction required minimizing sensitive data leakage in both visitor-facing API errors and server/browser logs.
+- Same-origin Worker usage does not require wildcard CORS, so default-open CORS should be removed and only explicit allowlisted origins permitted.
+- Third-party metadata insertion should use DOM APIs instead of unsafe `innerHTML` string assembly.
+- Privacy language should be expanded with conservative legal wording (no guarantees/immunity claims) and operationally accurate data-flow disclosures.
+
+### Summarized changes with dates
+- 2026-05-26 23:47 UTC: Hardened `src/api.js` with `publicApiError(...)`, minimal safe logging metadata, and generic 502 upstream messages that no longer expose request meta/tags/query/upstream URL/body/stack to visitors.
+- 2026-05-26 23:47 UTC: Reworked `src/utils.js` response helpers to add `htmlHeaders()` / `jsonHeaders()` security headers, remove wildcard CORS default, and gate CORS to a small explicit allowlist.
+- 2026-05-26 23:47 UTC: Updated `src/worker.js` to use secure HTML headers on app pages, redact/remove sensitive console error details, and replace unsafe third-party-data `innerHTML` paths with DOM/textContent link creation.
+- 2026-05-26 23:47 UTC: Added a visible URL/history privacy warning near reel filters and kept initial URL-based filtering behavior intact for landing pages.
+- 2026-05-26 23:47 UTC: Expanded repository documentation (`README.md`) with direct-data-path guidance, hardened API/privacy notes, placeholder-contact replacement warning, predeploy check reminder, and conservative content/removal contact guidance.

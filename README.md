@@ -8,8 +8,7 @@ A Cloudflare Worker site that turns e621's public API into an Instagram Reels-st
 - Instagram-inspired fullscreen UI with vertical swipe navigation and animated auto-advance transitions.
 - Lets videos play fully before auto-advancing, while images still advance after roughly 10 seconds.
 - Lets users switch to score-based sorting, add tags, and filter by rating.
-- Includes an almost-transparent settings cog with optional fit-media and hide-tags display toggles.
-- Ships as a single Worker with no extra Cloudflare bindings or dashboard changes required.
+- Includes privacy/safety hardening for logs, API errors, response headers, and metadata rendering.
 
 ## Local development
 
@@ -21,18 +20,27 @@ npm run dev
 ## Deploy
 
 ```bash
+npm run check
 npm run deploy
 ```
 
 ## Notes
 
-- The browser now requests `https://e621.net/posts.json` directly by default so visitor traffic goes straight to e621, and with no client-side fallback through this Worker API.
-- Browser JavaScript cannot set a custom `User-Agent` header, so direct requests always use the visitor's normal browser user agent. This app avoids client→Worker API relay paths for feed and autocomplete requests.
-- e621 requires a descriptive `User-Agent` for server-side API usage. Update the placeholder contact in `src/worker.js` before production deployment.
+- Normal frontend feed/autocomplete/photo content requests go directly from the visitor browser to `https://e621.net`.
+- Worker endpoints `/api/posts` and `/api/tags/autocomplete` still exist, but are not intended as the normal browser fallback path.
+- Worker/API privacy hardening reduces exposed error details, restricts CORS behavior, and minimizes sensitive logs.
+- Placeholder contact emails in policy/legal/support text must be replaced before production.
+- Run `npm run check` before deployment.
 
-- A dedicated `/privacy` page explains direct-to-e621 data flow and first-party privacy scope.
+## Content/removal note
+
+- This site does not normally host underlying e621 media as first-party content; it links/displays third-party content served by e621/static hosts.
+- Content removal, copyright, or privacy requests about specific e621-hosted posts should generally be sent to e621 first.
+- The site operator may consider removing local links/indexing references to specific posts when technically feasible.
+- Site-specific concerns can be sent to `privacy@example.com` (placeholder; replace before production).
 
 ## Migration note (2026-05-26)
 
-- `src/worker.js` now primarily routes requests while shared network/sanitization helpers are split into `src/api.js` and `src/utils.js`.
-- This is a structure-only refactor intended to preserve all existing routes and UI behavior.
+- `src/worker.js` routes requests and renders pages.
+- Shared network/API logic lives in `src/api.js`.
+- Shared sanitization/escaping/header helpers live in `src/utils.js`.
