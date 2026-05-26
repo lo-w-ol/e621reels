@@ -191,3 +191,16 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-26 23:47 UTC: Updated `src/worker.js` to use secure HTML headers on app pages, redact/remove sensitive console error details, and replace unsafe third-party-data `innerHTML` paths with DOM/textContent link creation.
 - 2026-05-26 23:47 UTC: Added a visible URL/history privacy warning near reel filters and kept initial URL-based filtering behavior intact for landing pages.
 - 2026-05-26 23:47 UTC: Expanded repository documentation (`README.md`) with direct-data-path guidance, hardened API/privacy notes, placeholder-contact replacement warning, predeploy check reminder, and conservative content/removal contact guidance.
+
+## Summary title: Privacy contact email replacement for policy page
+
+### Summarized context read
+- Reviewed `renderPrivacyPage()` and `PRIVACY_CONTACT_EMAIL` usage in `src/worker.js` to locate the policy contact address source.
+- Reviewed existing AGENTS.md append-only decision log format to preserve chronological continuity.
+
+### Summarized thinking
+- User requested a specific contact email update on the privacy page, so the lowest-risk change is replacing only the privacy contact constant used by the policy renderer.
+- Kept scope intentionally narrow to avoid unintended behavioral or policy wording changes.
+
+### Summarized changes with dates
+- 2026-05-26 23:54 UTC: Updated `PRIVACY_CONTACT_EMAIL` in `src/worker.js` from placeholder `privacy@example.com` to `owo_pounces_on@proton.me` so `/privacy` shows the requested contact.
