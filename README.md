@@ -31,3 +31,8 @@ npm run deploy
 - e621 requires a descriptive `User-Agent` for server-side API usage. Update the placeholder contact in `src/worker.js` before production deployment.
 
 - A dedicated `/privacy` page explains direct-to-e621 data flow and first-party privacy scope.
+
+## Migration note (2026-05-26)
+
+- `src/worker.js` now primarily routes requests while shared network/sanitization helpers are split into `src/api.js` and `src/utils.js`.
+- This is a structure-only refactor intended to preserve all existing routes and UI behavior.

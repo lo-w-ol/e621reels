@@ -152,3 +152,21 @@ When making changes in this repository, append entries to this file so the next 
 ### Summarized changes with dates
 - 2026-05-26 23:22 UTC: Expanded the `/privacy` page into a fuller Privacy Policy with effective date, data practices, third-party disclosures, rights language, children section, updates section, and legal transparency disclaimer.
 - 2026-05-26 23:22 UTC: Updated privacy page title text to “Privacy Policy” to match user intent and legal-page semantics.
+
+## Summary title: Worker modular split for routing/network utilities parity
+
+### Summarized context read
+- Reviewed monolithic `src/worker.js` route handling, API handlers, sanitizer helpers, and page renderers.
+- Reviewed `package.json` scripts to identify available static sanity checks (`npm run check`).
+- Reviewed existing AGENTS decision history to preserve continuity and append-only updates.
+
+### Summarized thinking
+- Safest no-behavior-change step is to extract only reusable utility and API/network logic first, leaving page rendering output intact.
+- Keeping route dispatch in `src/worker.js` while importing extracted modules minimizes risk and keeps all URL behavior identical.
+- A brief README migration note helps future contributors navigate the new file boundaries without implying runtime behavior changes.
+
+### Summarized changes with dates
+- 2026-05-26 23:39 UTC: Added `src/utils.js` with shared sanitization/encoding/JSON response helpers extracted from `src/worker.js`.
+- 2026-05-26 23:39 UTC: Added `src/api.js` with `/api/posts` and `/api/tags/autocomplete` handler logic plus upstream throttling/mapping helpers.
+- 2026-05-26 23:40 UTC: Updated `src/worker.js` to import modular API + utility helpers while preserving existing routes and HTML renderers.
+- 2026-05-26 23:40 UTC: Added a short migration note in `README.md` documenting the structural split and no-behavior-change intent.
