@@ -1,17 +1,9 @@
-import { handlePosts, handleTagAutocomplete } from './api.js';
 import { formatTagLabel, escapeHtml, serializeJsonLd, sanitizeTags, sanitizeRating, sanitizeRatioFilter, htmlHeaders } from './utils.js';
 
 export default {
   async fetch(request) {
     const url = new URL(request.url);
 
-    if (url.pathname === '/api/posts') {
-      return handlePosts(request, url);
-    }
-
-    if (url.pathname === '/api/tags/autocomplete') {
-      return handleTagAutocomplete(request, url);
-    }
 
     if (url.pathname === '/robots.txt') {
       return new Response(renderRobotsTxt(), {
@@ -758,7 +750,7 @@ function renderApp(url) {
       const TRACK_TRANSITION_MS = 320;
       const TRACK_TRANSITION_FALLBACK_MS = TRACK_TRANSITION_MS + 120;
       const TAG_AUTOCOMPLETE_LIMIT = 8;
-      const AUTOCOMPLETE_DEBOUNCE_MS = 160;
+      const AUTOCOMPLETE_DEBOUNCE_MS = 250;
       const INITIAL_MODE = ${JSON.stringify(seo.initialModeForClient)};
       const INITIAL_TAGS = ${JSON.stringify(seo.initialTagsForClient)};
       const INITIAL_RATING = ${JSON.stringify(seo.initialRatingForClient)};
@@ -805,6 +797,8 @@ function renderApp(url) {
           requestId: 0,
           debounceTimer: null,
           query: '',
+          abortController: null,
+          cache: new Map(),
         },
       };
 
@@ -1302,29 +1296,37 @@ function renderApp(url) {
           state.tagAutocomplete.activeIndex = items.length ? 0 : -1;
           renderTagAutocomplete();
         } catch (error) {
-          console.warn('Tag autocomplete failed', error);
           if (requestId !== state.tagAutocomplete.requestId) return;
+          if (error && error.name === 'AbortError') return;
           state.tagAutocomplete.items = [];
           state.tagAutocomplete.activeIndex = -1;
-          renderTagAutocomplete('Could not load tag suggestions right now.');
+          renderTagAutocomplete('Could not load tag suggestions');
         }
       }
 
       async function fetchTagAutocomplete(query) {
+        if (query.length < 2) return [];
+        const cached = state.tagAutocomplete.cache.get(query);
+        if (cached) return cached;
+        if (state.tagAutocomplete.abortController) {
+          state.tagAutocomplete.abortController.abort();
+        }
+        const abortController = new AbortController();
+        state.tagAutocomplete.abortController = abortController;
         const upstreamUrl = new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);
         upstreamUrl.searchParams.set('search[name_matches]', query + '*');
         const response = await fetch(upstreamUrl.toString(), {
+          method: 'GET',
+          credentials: 'omit',
+          referrerPolicy: 'no-referrer',
           headers: { Accept: 'application/json' },
+          signal: abortController.signal,
         });
         const payload = await parseJsonSafely(response);
         if (!response.ok) {
-          throw createFetchError('Direct tag autocomplete failed', {
-            url: upstreamUrl.toString(),
-            status: response.status,
-            payload,
-          });
+          throw new Error('autocomplete request failed');
         }
-        return Array.isArray(payload)
+        const results = Array.isArray(payload)
           ? payload
               .filter((tag) => tag && typeof tag.name === 'string')
               .slice(0, TAG_AUTOCOMPLETE_LIMIT)
@@ -1336,6 +1338,12 @@ function renderApp(url) {
                 antecedentName: tag.antecedent_name || null,
               }))
           : [];
+        state.tagAutocomplete.cache.set(query, results);
+        if (state.tagAutocomplete.cache.size > 40) {
+          const oldest = state.tagAutocomplete.cache.keys().next().value;
+          state.tagAutocomplete.cache.delete(oldest);
+        }
+        return results;
       }
 
       function handleAutocompleteKeydown(event) {
@@ -2139,7 +2147,7 @@ function renderAboutPage() {
 const PRIVACY_CONTACT_EMAIL = 'owo_pounces_on@proton.me';
 
 function renderPrivacyPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:24px}p,li{line-height:1.55}a{color:#ff73af}code{font-family:ui-monospace,Menlo,Consolas,monospace}body.page-transitioning{opacity:0;transition:opacity .22s ease}.updated{opacity:.8;font-size:.92rem}</style></head><body>${renderFloatingNav('privacy')}<div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-05-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker serves app shell assets (HTML/CSS/JS) and does not proxy those content API requests in normal operation.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:24px}p,li{line-height:1.55}a{color:#ff73af}code{font-family:ui-monospace,Menlo,Consolas,monospace}body.page-transitioning{opacity:0;transition:opacity .22s ease}.updated{opacity:.8;font-size:.92rem}</style></head><body>${renderFloatingNav('privacy')}<div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-05-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, media files, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker only serves the app shell/static HTML/CSS/JS, <code>robots.txt</code>, <code>sitemap.xml</code>, and local pages; it does not proxy e621 content API requests.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
 }
 
 function renderFloatingNav(activePage) {

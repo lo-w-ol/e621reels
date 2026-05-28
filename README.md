@@ -26,8 +26,9 @@ npm run deploy
 
 ## Notes
 
-- Normal frontend feed/autocomplete/photo content requests go directly from the visitor browser to `https://e621.net`.
-- Worker endpoints `/api/posts` and `/api/tags/autocomplete` still exist, but are not intended as the normal browser fallback path.
+- Normal frontend reels/feed/photos/media/tag-autocomplete requests go directly from the visitor browser to `https://e621.net`.
+- Tag autocomplete availability depends on e621 permitting browser-side cross-origin requests.
+- Worker proxy endpoints `/api/posts` and `/api/tags/autocomplete` have been removed to keep browser→e621 requests truly direct.
 - Worker/API privacy hardening reduces exposed error details, restricts CORS behavior, and minimizes sensitive logs.
 - Placeholder contact emails in policy/legal/support text must be replaced before production.
 - Run `npm run check` before deployment.
@@ -42,5 +43,5 @@ npm run deploy
 ## Migration note (2026-05-26)
 
 - `src/worker.js` routes requests and renders pages.
-- Shared network/API logic lives in `src/api.js`.
+- Worker proxy API module `src/api.js` was removed; Worker no longer proxies e621 content APIs.
 - Shared sanitization/escaping/header helpers live in `src/utils.js`.
