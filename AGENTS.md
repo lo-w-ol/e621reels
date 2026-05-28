@@ -222,3 +222,25 @@ When making changes in this repository, append entries to this file so the next 
 - 2026-05-28 05:34 UTC: Upgraded privacy reminder placement/copy near reel controls with direct Privacy page link and concise URL/history disclosure.
 - 2026-05-28 05:34 UTC: Improved interaction polish with stronger ARIA label updates on mute state and clearer focus-visible outlines for key interactive controls.
 - 2026-05-28 05:34 UTC: Preserved existing routes, direct client-to-e621 fetch path, Worker API endpoint availability, and existing security/privacy header behavior.
+
+## Summary title: Settings-page refactor to de-clutter Reels/Photos viewing layouts
+
+### Date and time
+- 2026-05-28 05:41 UTC
+
+### Summarised context
+- Reviewed `src/worker.js` route handlers, reel overlay UI, photo grid filtering logic, and global header/nav rendering.
+- Reviewed prior UX patch effects where filter chips/notices/onboarding controls had started competing with media layout.
+
+### Summarised reasoning
+- Moved control-heavy UX into a dedicated `/settings` page so Reels and Photos can remain focused media surfaces.
+- Implemented one shared localStorage settings model (`fr_settings_v1`) with simple helper functions to keep shared filters consistent across Reels and Photos and preserve existing URL-based entry behavior.
+- Kept direct client-side e621 request flow and existing route/security header architecture unchanged.
+
+### Summarised changes
+- Added `/settings` route and `renderSettingsPage(url)` with sections for Shared, Reels, Photos, and Privacy/display controls, including reset actions and Save & Apply flow.
+- Added shared settings helpers (`loadSettings`, `saveSettings`, `mergeUrlParamsIntoSettings`, `applySettingsToUrl`, and reset helpers) used by settings/reels/photos scripts.
+- Removed Reels overlay clutter introduced by prior patch (visible filter chips and content notice) while keeping essential viewer controls and onboarding capability.
+- Updated global navigation to include Settings and active-state handling.
+- Updated Photos to consume shared settings model for tags/sort/rating/ratio so filtering remains consistent with Reels.
+- Left existing public routes, crawler fallback sections, and direct-to-e621 data path intact.

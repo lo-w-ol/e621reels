@@ -37,6 +37,12 @@ export default {
       });
     }
 
+    if (url.pathname === '/settings') {
+      return new Response(renderSettingsPage(url), {
+        headers: htmlHeaders(),
+      });
+    }
+
     if (url.pathname === '/about') {
       return new Response(renderAboutPage(), {
         headers: htmlHeaders(),
@@ -707,8 +713,6 @@ function renderApp(url) {
               <div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div>
             </div>
             <p class="privacy-note" id="privacyUrlNotice">Filters may appear in your URL/history. <a href="/privacy" data-page-nav>Privacy</a>.</p>
-            <div class="ux-chip-row" id="filterSummary" aria-label="Current feed filters"></div>
-            <div class="ux-notice" id="contentNotice">Ratings and tags affect what appears next and may be reflected in your URL/history.</div>
             <div class="side-actions">
               <button class="action-button focus-ring" id="toggleMuteButton" type="button" aria-label="Unmute video audio">🔇</button>
             </div>
@@ -759,20 +763,22 @@ function renderApp(url) {
       const INITIAL_RATING = ${JSON.stringify(seo.initialRatingForClient)};
       const INITIAL_RATIO = ${JSON.stringify(seo.initialRatioForClient)};
 
+      const bootSettings = mergeUrlParamsIntoSettings(loadSettings(), new URL(window.location.href));
+      saveSettings(bootSettings);
       const state = {
         posts: [],
         currentIndex: 0,
         nextPage: 1,
         loading: false,
-        mode: INITIAL_MODE,
-        tags: INITIAL_TAGS,
-        rating: INITIAL_RATING,
-        ratio: INITIAL_RATIO,
-        muted: true,
+        mode: bootSettings.shared.sort || INITIAL_MODE,
+        tags: bootSettings.shared.tags || INITIAL_TAGS,
+        rating: bootSettings.shared.rating || INITIAL_RATING,
+        ratio: bootSettings.shared.ratio || INITIAL_RATIO,
+        muted: bootSettings.reels.muted !== false,
         timer: null,
         progressTimer: null,
         animationLock: false,
-        fitMedia: true,
+        fitMedia: bootSettings.reels.fitMedia !== false,
         hideTags: true,
         touchActive: false,
         gesturePointerId: null,
@@ -835,7 +841,6 @@ function renderApp(url) {
       const scrubHud = document.getElementById('scrubHud');
       const scrubTime = document.getElementById('scrubTime');
       const scrubBar = document.getElementById('scrubBar');
-      const filterSummary = document.getElementById('filterSummary');
       const onboardingGuide = document.getElementById('onboardingGuide');
       const dismissOnboarding = document.getElementById('dismissOnboarding');
 
@@ -845,7 +850,6 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
-      renderFilterSummary();
       maybeShowOnboarding();
 
       navToggleButton.addEventListener('click', (event) => {
@@ -904,8 +908,7 @@ function renderApp(url) {
         syncDisplaySettings();
         syncUrlState();
         closeSettings();
-        renderFilterSummary();
-        await restartFeed();
+          await restartFeed();
       });
 
       resetButton.addEventListener('click', async () => {
@@ -925,8 +928,7 @@ function renderApp(url) {
         syncDisplaySettings();
         syncUrlState();
         closeSettings();
-        renderFilterSummary();
-        await restartFeed();
+          await restartFeed();
       });
 
       nextButton.addEventListener('click', () => goToRelativePost(1));
@@ -999,8 +1001,7 @@ function renderApp(url) {
           state.fitMedia = !state.fitMedia;
           mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
           syncDisplaySettings();
-          renderFilterSummary();
-          rerenderCurrentSlide();
+              rerenderCurrentSlide();
         } else if (event.key.toLowerCase() === 't') {
           state.hideTags = !state.hideTags;
           hideTagsToggle.checked = state.hideTags;
@@ -1022,14 +1023,48 @@ function renderApp(url) {
       appRoot.addEventListener('touchcancel', cancelPointerGesture, { passive: false, capture: true });
       appRoot.addEventListener('wheel', handleWheel, { passive: false });
 
+      // Shared settings storage used by reels/photos/settings pages.
+      function loadSettings() {
+        const defaults = { shared: { tags: '', sort: 'trending', rating: '', ratio: '', syncUrl: true }, reels: { fitMedia: true, muted: true, onboardingSeen: false }, photos: { gridDensity: 'comfortable', fitImages: 'crop' } };
+        try {
+          const raw = window.localStorage.getItem('fr_settings_v1');
+          if (!raw) return defaults;
+          const parsed = JSON.parse(raw);
+          return { ...defaults, ...parsed, shared: { ...defaults.shared, ...(parsed.shared || {}) }, reels: { ...defaults.reels, ...(parsed.reels || {}) }, photos: { ...defaults.photos, ...(parsed.photos || {}) } };
+        } catch { return defaults; }
+      }
+      function saveSettings(settings) { window.localStorage.setItem('fr_settings_v1', JSON.stringify(settings)); }
+      function mergeUrlParamsIntoSettings(settings, urlObj) {
+        const mode = urlObj.searchParams.get('mode');
+        const tags = (urlObj.searchParams.get('tags') || '').trim();
+        const rating = (urlObj.searchParams.get('rating') || '').trim();
+        const ratio = (urlObj.searchParams.get('ratio') || '').trim();
+        if (mode === 'score' || mode === 'trending') settings.shared.sort = mode;
+        if (tags) settings.shared.tags = tags;
+        if (['s','q','e'].includes(rating)) settings.shared.rating = rating;
+        if (['vertical','landscape'].includes(ratio)) settings.shared.ratio = ratio;
+        return settings;
+      }
+      function applySettingsToUrl(settings, targetPath) {
+        const next = new URL(window.location.origin + targetPath);
+        if (settings.shared.sort === 'score') next.searchParams.set('mode', 'score');
+        if (settings.shared.tags) next.searchParams.set('tags', settings.shared.tags);
+        if (settings.shared.rating) next.searchParams.set('rating', settings.shared.rating);
+        if (settings.shared.ratio) next.searchParams.set('ratio', settings.shared.ratio);
+        return next.toString();
+      }
+
       function maybeShowOnboarding() {
-        if (window.localStorage.getItem('fr_onboarding_seen') === '1') return;
+        const settings = loadSettings();
+        if (settings.reels.onboardingSeen) return;
         onboardingGuide.hidden = false;
       }
 
       function dismissOnboardingGuide() {
         onboardingGuide.hidden = true;
-        window.localStorage.setItem('fr_onboarding_seen', '1');
+        const settings = loadSettings();
+        settings.reels.onboardingSeen = true;
+        saveSettings(settings);
       }
 
       function renderFilterSummary() {
@@ -1054,6 +1089,11 @@ function renderApp(url) {
       }
 
       function syncUrlState() {
+        const settings = loadSettings();
+        settings.shared = { ...settings.shared, tags: state.tags, sort: state.mode, rating: state.rating, ratio: state.ratio };
+        settings.reels = { ...settings.reels, fitMedia: state.fitMedia, muted: state.muted };
+        saveSettings(settings);
+        if (!settings.shared.syncUrl) return;
         const nextUrl = new URL(window.location.href);
         nextUrl.search = '';
         if (state.mode !== 'trending') nextUrl.searchParams.set('mode', state.mode);
@@ -2074,13 +2114,18 @@ function renderApp(url) {
 </html>`;
 }
 
-function renderPhotoGridPage() {
+function renderPhotoGridPage(url) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
   <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox.open{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}</style></head>
   <body>${renderGlobalHeader('photos')}<div class="frame"><main class="grid" id="grid"></main>
   <div class="status" id="status">Loading photos…</div><pre class="error" id="errorBox" hidden></pre>
   <div class="lightbox" id="lightbox"><div class="swipe-arrow left">‹</div><div class="swipe-arrow right">›</div><div class="down-hint" id="downHint">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div><div class="credit" id="lightboxCredit"></div></div>
-  <script>${renderGlobalHeaderScript()}</script><script>const grid=document.getElementById('grid');const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxTrack=document.getElementById('lightboxTrack');const lightboxCredit=document.getElementById('lightboxCredit');const downHint=document.getElementById('downHint');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;let lightboxTouchStartX=0;let lightboxTouchStartY=0;let lightboxTouchActive=false;let lightboxBaseX=0;function showError(){errorBox.hidden=false;errorBox.textContent='Could not load content right now. Try again shortly.'}function photoTagsFromUrl(){const url=new URL(window.location.href);const raw=(url.searchParams.get('tags')||'').trim().split(/\s+/).filter(Boolean);const rating=(url.searchParams.get('rating')||'').trim().toLowerCase();const ratio=(url.searchParams.get('ratio')||'').trim().toLowerCase();const tags=['order:score','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return{id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}function buildLightboxSlide(post){const slide=document.createElement('div');slide.className='lightbox-slide';const image=document.createElement('img');image.alt='Expanded image '+(post.id||'');image.src=post.mediaUrl||post.previewUrl;image.addEventListener('load',()=>{downHint.classList.toggle('show',image.naturalHeight>image.naturalWidth*1.45);},{once:true});slide.appendChild(image);return slide;}function updateLightboxCredit(post){lightboxCredit.textContent='';const artist=document.createTextNode('Artist: '+post.artistText+' • ');const link=document.createElement('a');link.href=post.sourceUrl;link.target='_blank';link.rel='noreferrer noopener';link.textContent='View post';lightboxCredit.append(artist,link);}function setLightboxTrack(offsetPx,animated){lightboxTrack.classList.toggle('animating',Boolean(animated));lightboxTrack.style.transform='translate3d('+offsetPx+'px,0,0)';}function currentBase(){return allPosts[lightboxIndex-1]?-window.innerWidth:0;}function renderLightboxAt(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const prev=allPosts[index-1]||null;const current=allPosts[index];const next=allPosts[index+1]||null;lightboxTrack.innerHTML='';if(prev)lightboxTrack.appendChild(buildLightboxSlide(prev));lightboxTrack.appendChild(buildLightboxSlide(current));if(next)lightboxTrack.appendChild(buildLightboxSlide(next));lightboxBaseX=currentBase();setLightboxTrack(lightboxBaseX,false);updateLightboxCredit(current);}function openLightbox(index){if(index<0||index>=allPosts.length)return;renderLightboxAt(index);lightbox.classList.add('open');}function closeLightbox(){lightbox.classList.remove('open');lightboxTrack.innerHTML='';lightboxIndex=-1;downHint.classList.remove('show');}function settleMove(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length){setLightboxTrack(lightboxBaseX,true);return;}const target=delta>0?lightboxBaseX-window.innerWidth:lightboxBaseX+window.innerWidth;setLightboxTrack(target,true);setTimeout(()=>{renderLightboxAt(next);},280);}function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&&(p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){console.error('photo-grid load failed',{message:String(err&&err.message?err.message:err)});status.textContent='Could not load content right now. Try again shortly.';showError();}finally{loading=false;}}function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});lightbox.addEventListener('click',(event)=>{if(event.target===lightbox||event.target===lightboxCredit)closeLightbox();});document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')closeLightbox();if(event.key==='ArrowDown'||event.key==='ArrowRight')settleMove(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')settleMove(-1);});lightbox.addEventListener('touchstart',(event)=>{if(!lightbox.classList.contains('open'))return;lightboxTouchActive=true;lightboxTouchStartX=event.touches[0].clientX;lightboxTouchStartY=event.touches[0].clientY;lightboxBaseX=currentBase();lightboxTrack.classList.remove('animating');},{passive:true});lightbox.addEventListener('touchmove',(event)=>{if(!lightboxTouchActive)return;const dx=event.touches[0].clientX-lightboxTouchStartX;const dy=event.touches[0].clientY-lightboxTouchStartY;if(Math.abs(dx)>=Math.abs(dy)){event.preventDefault();setLightboxTrack(lightboxBaseX+dx,false);}},{passive:false});lightbox.addEventListener('touchend',(event)=>{if(!lightboxTouchActive)return;lightboxTouchActive=false;const dx=event.changedTouches[0].clientX-lightboxTouchStartX;const dy=event.changedTouches[0].clientY-lightboxTouchStartY;const threshold=window.innerWidth*0.4;if(Math.abs(dx)>=Math.abs(dy)){if(dx<=-threshold){settleMove(1);return;}if(dx>=threshold){settleMove(-1);return;}setLightboxTrack(lightboxBaseX,true);return;}setLightboxTrack(lightboxBaseX,true);},{passive:true});const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></div></body></html>`;
+  <script>${renderGlobalHeaderScript()}</script><script>const grid=document.getElementById('grid');const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxTrack=document.getElementById('lightboxTrack');const lightboxCredit=document.getElementById('lightboxCredit');const downHint=document.getElementById('downHint');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;let lightboxTouchStartX=0;let lightboxTouchStartY=0;let lightboxTouchActive=false;let lightboxBaseX=0;function showError(){errorBox.hidden=false;errorBox.textContent='Could not load content right now. Try again shortly.'}function loadSettings(){const d={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...d,...p,shared:{...d.shared,...(p.shared||{})},photos:{...d.photos,...(p.photos||{})}}}catch{return d}}function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}function photoTagsFromUrl(){const settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(window.location.href));const raw=(settings.shared.tags||'').trim().split(/\s+/).filter(Boolean);const rating=(settings.shared.rating||'').trim().toLowerCase();const ratio=(settings.shared.ratio||'').trim().toLowerCase();const tags=[settings.shared.sort==='score'?'order:score':'order:rank','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return{id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}function buildLightboxSlide(post){const slide=document.createElement('div');slide.className='lightbox-slide';const image=document.createElement('img');image.alt='Expanded image '+(post.id||'');image.src=post.mediaUrl||post.previewUrl;image.addEventListener('load',()=>{downHint.classList.toggle('show',image.naturalHeight>image.naturalWidth*1.45);},{once:true});slide.appendChild(image);return slide;}function updateLightboxCredit(post){lightboxCredit.textContent='';const artist=document.createTextNode('Artist: '+post.artistText+' • ');const link=document.createElement('a');link.href=post.sourceUrl;link.target='_blank';link.rel='noreferrer noopener';link.textContent='View post';lightboxCredit.append(artist,link);}function setLightboxTrack(offsetPx,animated){lightboxTrack.classList.toggle('animating',Boolean(animated));lightboxTrack.style.transform='translate3d('+offsetPx+'px,0,0)';}function currentBase(){return allPosts[lightboxIndex-1]?-window.innerWidth:0;}function renderLightboxAt(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const prev=allPosts[index-1]||null;const current=allPosts[index];const next=allPosts[index+1]||null;lightboxTrack.innerHTML='';if(prev)lightboxTrack.appendChild(buildLightboxSlide(prev));lightboxTrack.appendChild(buildLightboxSlide(current));if(next)lightboxTrack.appendChild(buildLightboxSlide(next));lightboxBaseX=currentBase();setLightboxTrack(lightboxBaseX,false);updateLightboxCredit(current);}function openLightbox(index){if(index<0||index>=allPosts.length)return;renderLightboxAt(index);lightbox.classList.add('open');}function closeLightbox(){lightbox.classList.remove('open');lightboxTrack.innerHTML='';lightboxIndex=-1;downHint.classList.remove('show');}function settleMove(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length){setLightboxTrack(lightboxBaseX,true);return;}const target=delta>0?lightboxBaseX-window.innerWidth:lightboxBaseX+window.innerWidth;setLightboxTrack(target,true);setTimeout(()=>{renderLightboxAt(next);},280);}function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&&(p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){console.error('photo-grid load failed',{message:String(err&&err.message?err.message:err)});status.textContent='Could not load content right now. Try again shortly.';showError();}finally{loading=false;}}function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});lightbox.addEventListener('click',(event)=>{if(event.target===lightbox||event.target===lightboxCredit)closeLightbox();});document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')closeLightbox();if(event.key==='ArrowDown'||event.key==='ArrowRight')settleMove(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')settleMove(-1);});lightbox.addEventListener('touchstart',(event)=>{if(!lightbox.classList.contains('open'))return;lightboxTouchActive=true;lightboxTouchStartX=event.touches[0].clientX;lightboxTouchStartY=event.touches[0].clientY;lightboxBaseX=currentBase();lightboxTrack.classList.remove('animating');},{passive:true});lightbox.addEventListener('touchmove',(event)=>{if(!lightboxTouchActive)return;const dx=event.touches[0].clientX-lightboxTouchStartX;const dy=event.touches[0].clientY-lightboxTouchStartY;if(Math.abs(dx)>=Math.abs(dy)){event.preventDefault();setLightboxTrack(lightboxBaseX+dx,false);}},{passive:false});lightbox.addEventListener('touchend',(event)=>{if(!lightboxTouchActive)return;lightboxTouchActive=false;const dx=event.changedTouches[0].clientX-lightboxTouchStartX;const dy=event.changedTouches[0].clientY-lightboxTouchStartY;const threshold=window.innerWidth*0.4;if(Math.abs(dx)>=Math.abs(dy)){if(dx<=-threshold){settleMove(1);return;}if(dx>=threshold){settleMove(-1);return;}setLightboxTrack(lightboxBaseX,true);return;}setLightboxTrack(lightboxBaseX,true);},{passive:true});const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></div></body></html>`;
+}
+
+
+function renderSettingsPage(url) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.wrap{max-width:920px;margin:20px auto;display:grid;gap:14px}.card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.btns{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}</style></head><body>${renderGlobalHeader('settings')}<main class="wrap"><h1>Settings</h1><form id="settingsForm"><section class="card"><h2>Shared search and filters</h2><label>Tags/search query<input id="sharedTags"/></label><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="btns"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="btns"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderGlobalHeaderScript()}</script><script>const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();q('resetShared').onclick=()=>{resetSharedSettings(settings);bind()};q('resetReels').onclick=()=>{resetReelsSettings(settings);bind()};q('resetPhotos').onclick=()=>{resetPhotosSettings(settings);bind()};q('resetOnboarding').onclick=()=>{settings.reels.onboardingSeen=false;saveSettings(settings)};q('settingsForm').addEventListener('submit',(e)=>{e.preventDefault();settings.shared.tags=q('sharedTags').value.trim();settings.shared.sort=q('sharedSort').value;settings.shared.rating=q('sharedRating').value;settings.shared.ratio=q('sharedRatio').value;settings.shared.excludeTags=q('sharedExclude').value.trim();settings.reels.fitMedia=q('reelsFit').value==='contain';settings.reels.muted=q('reelsMute').value==='true';settings.photos.gridDensity=q('photosDensity').value;settings.photos.fitImages=q('photosFit').value;settings.shared.syncUrl=q('syncUrl').checked;saveSettings(settings);const from=new URLSearchParams(location.search).get('from');if(from==='photos'){location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/photos'):'/photos';return;}location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/'):'/';});</script></body></html>`;
 }
 
 function renderAboutPage() {
@@ -2097,7 +2142,7 @@ function renderPrivacyPage() {
 }
 
 function renderGlobalHeader(active) {
-  return `<header class="global-header"><button class="global-menu-toggle" id="globalMenuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="globalMenu">☰</button><nav class="global-drawer" id="globalMenu"><a href="/" data-page-nav${active === 'reels' ? ' aria-current="page"' : ''}>Reels</a><a href="/photos" data-page-nav${active === 'photos' ? ' aria-current="page"' : ''}>Photos</a><a href="/about" data-page-nav${active === 'about' ? ' aria-current=\"page\"' : ''}>About</a><a href="/privacy" data-page-nav${active === 'privacy' ? ' aria-current=\"page\"' : ''}>Privacy</a></nav></header>`;
+  return `<header class="global-header"><button class="global-menu-toggle" id="globalMenuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="globalMenu">☰</button><nav class="global-drawer" id="globalMenu"><a href="/" data-page-nav${active === 'reels' ? ' aria-current="page"' : ''}>Reels</a><a href="/photos" data-page-nav${active === 'photos' ? ' aria-current="page"' : ''}>Photos</a><a href="/settings" data-page-nav${active === 'settings' ? ' aria-current="page"' : ''}>Settings</a><a href="/about" data-page-nav${active === 'about' ? ' aria-current=\"page\"' : ''}>About</a><a href="/privacy" data-page-nav${active === 'privacy' ? ' aria-current=\"page\"' : ''}>Privacy</a></nav></header>`;
 }
 
 function renderGlobalHeaderScript() {
