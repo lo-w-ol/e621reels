@@ -244,3 +244,27 @@ When making changes in this repository, append entries to this file so the next 
 - Updated global navigation to include Settings and active-state handling.
 - Updated Photos to consume shared settings model for tags/sort/rating/ratio so filtering remains consistent with Reels.
 - Left existing public routes, crawler fallback sections, and direct-to-e621 data path intact.
+
+## Summary title: Isolated floating navigation component to eliminate cross-page menu style drift
+
+### Date and time
+- 2026-05-28 05:48 UTC
+
+### Summarised context
+- Reviewed `src/worker.js` for duplicated header/menu render logic and page-specific CSS dependencies affecting nav appearance/behavior.
+- Reviewed Settings-page shell/CSS and identified coupling where generic nav selectors/classes could be overridden by route-local styles.
+
+### Summarised reasoning
+- Replaced shared header/menu markup with one isolated floating navigation component to prevent cross-page CSS interference and ID collisions.
+- Used a shadow-DOM custom element for scoped styles/behavior, while keeping a server-rendered no-JS fallback nav for crawlability and graceful degradation.
+- Kept page content architecture unchanged (Reels/Photos viewer focus, Settings-only controls, direct e621 client flow).
+
+### Summarised changes
+- Added `renderFloatingNav(activePage)` + `renderFloatingNavScript()` and switched all main pages (`/`, `/photos`, `/settings`, `/about`, `/privacy`) to this single nav implementation.
+- Added shadow-root-contained burger/panel/nav-link styles and behavior: local toggle state, `aria-expanded`, Escape-close, outside-click close, and page-transition-aware navigation.
+- Added a basic styled `.fr-nav-fallback` no-JS nav that is hidden only after component init.
+- Updated Settings page shell styling to explicit namespaced structure (`settings-page`, `settings-shell`, `settings-card`, `settings-actions`) so settings layout no longer depends on header/menu CSS.
+- Removed dependency on old `renderGlobalHeader*` helper path by consolidating all page usage to the new floating nav helper.
+
+### Validation performed
+- Ran `npm run check` (`wrangler deploy --dry-run`) successfully after nav refactor.
