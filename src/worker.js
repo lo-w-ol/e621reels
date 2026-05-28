@@ -358,6 +358,7 @@ function renderApp(url) {
         backdrop-filter: blur(16px);
       }
       .privacy-note{margin:8px 0 0;color:var(--muted);font-size:.78rem;}
+      .privacy-note a{color:#fff}.ux-chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ux-chip{border:1px solid var(--outline);background:rgba(8,8,12,.5);color:var(--text);border-radius:999px;padding:8px 12px;font-size:.78rem;min-height:40px}.ux-chip.selected{background:var(--accent-soft);border-color:rgba(255,47,120,.5)}.ux-notice{margin-top:10px;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:rgba(8,8,12,.45);font-size:.8rem;line-height:1.4}.ux-notice[hidden]{display:none}.onboarding{position:absolute;inset:auto 12px calc(var(--safe-bottom) + 72px);z-index:20;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:12px;backdrop-filter:blur(14px)}.onboarding[hidden]{display:none}.onboarding h3{margin:0 0 6px;font-size:.95rem}.onboarding p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.onboarding-actions{display:flex;justify-content:flex-end;margin-top:10px}.focus-ring:focus-visible,.action-button:focus-visible,.global-menu-toggle:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
       .credit a { color: #fff; }
       .scrub-hud {
         position: absolute;
@@ -705,12 +706,15 @@ function renderApp(url) {
             <div class="meta" id="metaBlock">
               <div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div>
             </div>
-            <p class="privacy-note" id="privacyUrlNotice">Filters may appear in your URL/history.</p>
+            <p class="privacy-note" id="privacyUrlNotice">Filters may appear in your URL/history. <a href="/privacy" data-page-nav>Privacy</a>.</p>
+            <div class="ux-chip-row" id="filterSummary" aria-label="Current feed filters"></div>
+            <div class="ux-notice" id="contentNotice">Ratings and tags affect what appears next and may be reflected in your URL/history.</div>
             <div class="side-actions">
-              <button class="action-button" id="toggleMuteButton" type="button" aria-label="Toggle mute">🔇</button>
+              <button class="action-button focus-ring" id="toggleMuteButton" type="button" aria-label="Unmute video audio">🔇</button>
             </div>
           </div>
         </section>
+        <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up/down for next reel, drag sideways on video to scrub, tap mute, and use the menu to switch pages.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
         <div hidden aria-hidden="true">
           <div id="statusCard"><strong id="statusTitle"></strong><p id="statusText"></p></div>
           <div id="postTitle"></div><div id="tagList"></div><div id="sortBadge"></div><div id="ratioBadge"></div><div id="counterBadge"></div>
@@ -831,6 +835,9 @@ function renderApp(url) {
       const scrubHud = document.getElementById('scrubHud');
       const scrubTime = document.getElementById('scrubTime');
       const scrubBar = document.getElementById('scrubBar');
+      const filterSummary = document.getElementById('filterSummary');
+      const onboardingGuide = document.getElementById('onboardingGuide');
+      const dismissOnboarding = document.getElementById('dismissOnboarding');
 
       modeSelect.value = state.mode;
       tagsInput.value = state.tags;
@@ -838,6 +845,8 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
+      renderFilterSummary();
+      maybeShowOnboarding();
 
       navToggleButton.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -895,6 +904,7 @@ function renderApp(url) {
         syncDisplaySettings();
         syncUrlState();
         closeSettings();
+        renderFilterSummary();
         await restartFeed();
       });
 
@@ -915,6 +925,7 @@ function renderApp(url) {
         syncDisplaySettings();
         syncUrlState();
         closeSettings();
+        renderFilterSummary();
         await restartFeed();
       });
 
@@ -931,8 +942,10 @@ function renderApp(url) {
           state.currentMedia.muted = state.muted;
         }
         toggleMuteButton.textContent = state.muted ? '🔇' : '🔊';
+        toggleMuteButton.setAttribute('aria-label', state.muted ? 'Unmute video audio' : 'Mute video audio');
       });
 
+      dismissOnboarding.addEventListener('click', dismissOnboardingGuide);
       tagsInput.addEventListener('input', () => scheduleTagAutocomplete());
       tagsInput.addEventListener('focus', () => scheduleTagAutocomplete(true));
       tagsInput.addEventListener('blur', () => {
@@ -986,6 +999,7 @@ function renderApp(url) {
           state.fitMedia = !state.fitMedia;
           mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
           syncDisplaySettings();
+          renderFilterSummary();
           rerenderCurrentSlide();
         } else if (event.key.toLowerCase() === 't') {
           state.hideTags = !state.hideTags;
@@ -994,6 +1008,7 @@ function renderApp(url) {
         } else if (event.key === 'Escape') {
           closeSettings();
           closeTagAutocomplete();
+          dismissOnboardingGuide();
         }
       });
 
@@ -1006,6 +1021,27 @@ function renderApp(url) {
       appRoot.addEventListener('touchend', handleTouchEnd, { passive: false, capture: true });
       appRoot.addEventListener('touchcancel', cancelPointerGesture, { passive: false, capture: true });
       appRoot.addEventListener('wheel', handleWheel, { passive: false });
+
+      function maybeShowOnboarding() {
+        if (window.localStorage.getItem('fr_onboarding_seen') === '1') return;
+        onboardingGuide.hidden = false;
+      }
+
+      function dismissOnboardingGuide() {
+        onboardingGuide.hidden = true;
+        window.localStorage.setItem('fr_onboarding_seen', '1');
+      }
+
+      function renderFilterSummary() {
+        const rows = [['Trending', state.mode === 'trending'], ['Top scored', state.mode === 'score'], ['Safe', state.rating === 's'], ['Questionable', state.rating === 'q'], ['Explicit', state.rating === 'e'], ['Any ratio', !state.ratio], ['Vertical', state.ratio === 'vertical'], ['Landscape', state.ratio === 'landscape'], ['Contain', state.fitMedia], ['Fullscreen', !state.fitMedia]];
+        filterSummary.innerHTML = '';
+        rows.forEach(([label, selected]) => {
+          const chip = document.createElement('span');
+          chip.className = 'ux-chip' + (selected ? ' selected' : '');
+          chip.textContent = label;
+          filterSummary.appendChild(chip);
+        });
+      }
 
       function closeSettings() {
         filterPanel.classList.remove('open');
@@ -2169,4 +2205,3 @@ ${urls
     .join('\n')}
 </urlset>`;
 }
-

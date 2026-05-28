@@ -204,3 +204,21 @@ When making changes in this repository, append entries to this file so the next 
 
 ### Summarized changes with dates
 - 2026-05-26 23:54 UTC: Updated `PRIVACY_CONTACT_EMAIL` in `src/worker.js` from placeholder `privacy@example.com` to `owo_pounces_on@proton.me` so `/privacy` shows the requested contact.
+
+## Summary title: UX polish pass for onboarding, filter clarity, and safe-state messaging
+
+### Summarized context read
+- Reviewed `src/worker.js` reel shell styles/markup and client script wiring for filters, status states, mute control, and overlays.
+- Reviewed existing global nav behavior and privacy-note placement to preserve direct-to-e621 flow and route behavior.
+
+### Summarized thinking
+- The safest approach was incremental UI polish inside existing render/script surfaces, without introducing framework/runtime changes or touching data-path architecture.
+- Added lightweight, localStorage-backed onboarding and human-readable filter summaries to improve discoverability while keeping existing query/filter behavior.
+- Improved privacy/readability and accessibility affordances (labels/focus/escape-friendly overlays) with minimal code surface and no sensitive error expansion.
+
+### Summarized changes with dates
+- 2026-05-28 05:34 UTC: Added subtle first-run onboarding overlay (dismissible, localStorage-backed) describing swipe/scrub/mute/menu controls.
+- 2026-05-28 05:34 UTC: Added visible human-readable filter summary chips for mode/rating/ratio/display states (Trending, Top scored, Safe, Questionable, Explicit, Any ratio, Vertical, Landscape, Contain, Fullscreen).
+- 2026-05-28 05:34 UTC: Upgraded privacy reminder placement/copy near reel controls with direct Privacy page link and concise URL/history disclosure.
+- 2026-05-28 05:34 UTC: Improved interaction polish with stronger ARIA label updates on mute state and clearer focus-visible outlines for key interactive controls.
+- 2026-05-28 05:34 UTC: Preserved existing routes, direct client-to-e621 fetch path, Worker API endpoint availability, and existing security/privacy header behavior.
