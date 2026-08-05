@@ -268,3 +268,35 @@ When making changes in this repository, append entries to this file so the next 
 
 ### Validation performed
 - Ran `npm run check` (`wrangler deploy --dry-run`) successfully after nav refactor.
+
+## Summary title: Worker proxy endpoint removal + direct-only settings autocomplete hardening
+
+### Date and time
+- 2026-05-28 05:58 UTC
+
+### Summarised context
+- Reviewed `src/worker.js` route dispatch and settings autocomplete client logic to identify remaining Worker proxy coupling.
+- Reviewed `src/api.js` usage and repository references for `/api/posts` and `/api/tags/autocomplete`.
+- Reviewed `README.md` and `/privacy` policy wording for alignment with actual network flow.
+
+### Summarised reasoning
+- To keep the privacy model accurate, Worker-side e621 API proxy routes had to be removed entirely rather than kept as hidden fallback paths.
+- Settings autocomplete needed explicit direct-fetch resilience (debounce, cache, abort, and generic non-blocking failure message) without exposing upstream errors or reintroducing proxy fallback.
+- Documentation needed synchronized language updates so policy/README claims match runtime behavior.
+
+### Summarised changes
+- Removed Worker proxy route handling and API handler import for `/api/posts` and `/api/tags/autocomplete` from `src/worker.js`.
+- Deleted `src/api.js` after confirming it only served now-removed proxy endpoints.
+- Updated settings/reels autocomplete logic in `src/worker.js` to direct e621 fetch with `search[name_matches]=<token>*`, 250ms debounce, in-memory query cache, AbortController cancellation, and concise “Could not load tag suggestions” error text.
+- Updated privacy policy text in `src/worker.js` to explicitly state direct browser requests for reels/photos/media/autocomplete and that Worker only serves shell/static/local pages plus robots/sitemap.
+- Updated `README.md` notes and migration section to document proxy endpoint removal and direct-browser CORS dependency for autocomplete.
+
+### Files changed
+- `src/worker.js`
+- `README.md`
+- `AGENTS.md`
+- removed: `src/api.js`
+
+### Validation performed
+- Ran `npm run check`.
+- Searched codebase for active references to `/api/posts`, `/api/tags/autocomplete`, `handlePosts`, and `handleTagAutocomplete`.
