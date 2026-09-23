@@ -268,3 +268,27 @@ When making changes in this repository, append entries to this file so the next 
 
 ### Validation performed
 - Ran `npm run check` (`wrangler deploy --dry-run`) successfully after nav refactor.
+
+## Summary title: Restore e621 media loading (referrer policy) + hide stuck fallback nav
+
+### Date and time
+- 2026-09-23 08:20 UTC
+
+### Summarised context
+- Live site (furryreel.com) showed blank reels and blank photo thumbnails; headless Chromium logged `net::ERR_BLOCKED_BY_ORB` for nearly every `static1.e621.net` image/video request while the `e621.net/posts.json` API call itself returned 200.
+- Reviewed `htmlHeaders()` in `src/utils.js` (page `Referrer-Policy: no-referrer`, added in the 2026-05-26 privacy hardening) and the floating-nav fallback CSS in `src/worker.js`.
+
+### Summarised reasoning
+- Bisected with curl: e621's static host now returns `403 text/html` for cross-site `no-cors` embeds (`Sec-Fetch-Mode: no-cors` + `Sec-Fetch-Site: cross-site`) that carry no `Referer`. Any referrer (even an unrelated origin) returns 200/206. Chrome then ORB-blocks the HTML 403 body, so every `<img>`/`<video>` fails. `no-referrer` guaranteed the missing header.
+- `strict-origin` is the tightest policy that still sends a referrer: only the bare origin (e.g. `https://furryreel.com/`) goes to e621, never the page path or `?tags=` query, so the original privacy intent (not leaking search tags) is preserved. Outbound "View post" links keep `rel="noreferrer"`.
+- The no-JS fallback nav was given the `hidden` attribute by the nav component, but the page CSS `display:flex` overrode the UA `[hidden]` rule, so the fallback link bar stayed visible over the top of Reels and Settings.
+
+### Summarised changes
+- `src/utils.js`: HTML page `referrer-policy` changed from `no-referrer` to `strict-origin` (JSON API responses unchanged).
+- `src/worker.js`: added `.fr-nav-fallback[hidden]{display:none}` (Reels shell + Settings page) so the fallback nav hides once the floating nav initialises.
+- `src/worker.js`: Privacy page "Third-party processing" now states that only the site origin is sent to e621 as the referrer.
+- `README.md`: noted the referrer requirement so it is not reverted to `no-referrer`.
+
+### Validation performed
+- `npm run check` (wrangler dry-run) passes.
+- Local `wrangler dev` + Chromium: Photos 12/12 requested thumbnails loaded, Reels poster + webm playback working, referrer sent was origin-only; control run forcing the old `no-referrer` header on the same build: 0 loaded / 16 failed.

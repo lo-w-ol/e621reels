@@ -75,7 +75,9 @@ export function htmlHeaders() {
   return {
     'content-type': 'text/html; charset=UTF-8',
     'cache-control': 'no-store',
-    'referrer-policy': 'no-referrer',
+    // e621's static media hosts reject cross-site <img>/<video> requests that carry no Referer (403 → ERR_BLOCKED_BY_ORB),
+    // so pages must send one. strict-origin sends only this site's origin, never the page path or tag query string.
+    'referrer-policy': 'strict-origin',
     'x-content-type-options': 'nosniff',
     'permissions-policy': "geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()",
     'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://e621.net; img-src 'self' data: https://static1.e621.net https://static1.e926.net https://static.e621.net https://e621.net; media-src 'self' https://static1.e621.net https://static1.e926.net https://static.e621.net https://e621.net; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
