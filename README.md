@@ -29,6 +29,7 @@ npm run deploy
 - Normal frontend feed/autocomplete/photo content requests go directly from the visitor browser to `https://e621.net`.
 - Worker endpoints `/api/posts` and `/api/tags/autocomplete` still exist, but are not intended as the normal browser fallback path.
 - Worker/API privacy hardening reduces exposed error details, restricts CORS behavior, and minimizes sensitive logs.
+- HTML pages use `Referrer-Policy: strict-origin`, not `no-referrer`: e621's static media hosts return 403 for embedded images/videos that carry no `Referer`, which breaks every thumbnail and reel. `strict-origin` sends only the site origin, never the page path or tag query.
 - Placeholder contact emails in policy/legal/support text must be replaced before production.
 - Run `npm run check` before deployment.
 
