@@ -20,9 +20,21 @@ npm run dev
 ## Deploy
 
 ```bash
+npm test
 npm run check
 npm run deploy
 ```
+
+## e621 API client
+
+Every browser call to the e621 API (reels feed, photo grid, tag autocomplete) goes through `src/client/e621-client.js`. Do not call `fetch` on e621 directly from page scripts.
+
+- **Rate limit:** request starts are spaced at least 1 s apart (e621 recommends 1/s; over 2/s returns 503), shared across open tabs via Web Locks + `localStorage`. 429/503/network errors push every caller back, not just the one retrying.
+- **No duplicates:** identical in-flight requests share one fetch. A caller that loses interest cancels the request only while it is still queued; a request already sent completes and is cached.
+- **Retries:** 10 s timeout per attempt, 3 attempts with exponential backoff and jitter, then the page shows an error with a "Try again" button. 4xx (other than 429) is not retried. e621 exposes no response headers over CORS, so `Retry-After` cannot be read.
+- **Cache:** results are kept in memory and in the tab's `sessionStorage` (fresh 10 min for posts, 1 h for autocomplete; up to 1 h stale data is shown, with a notice, if e621 is down). Reload and back navigation make no API calls for data already loaded, and the photo grid returns to the same scroll position.
+- **Diagnostics:** run `frApiStats()` or `frApiLog()` in the browser console for request timings, retries, cache hits and failures (labels and statuses only, never tags or URLs). Set `localStorage.fr_debug = '1'` to log every request. The photo grid also records a `fr:first-photo` performance mark.
+- The Worker serves the client modules at `/assets/<content-hash>/…` with immutable caching. `wrangler.jsonc` imports `src/client/*.js` as text for this; `npm test` imports the same files as ES modules.
 
 ## Notes
 
@@ -45,3 +57,4 @@ npm run deploy
 - `src/worker.js` routes requests and renders pages.
 - Shared network/API logic lives in `src/api.js`.
 - Shared sanitization/escaping/header helpers live in `src/utils.js`.
+- Browser-side API client and photo paging state live in `src/client/` (served by `src/assets.js`, tested in `test/`).

@@ -292,3 +292,32 @@ When making changes in this repository, append entries to this file so the next 
 ### Validation performed
 - `npm run check` (wrangler dry-run) passes.
 - Local `wrangler dev` + Chromium: Photos 12/12 requested thumbnails loaded, Reels poster + webm playback working, referrer sent was origin-only; control run forcing the old `no-referrer` header on the same build: 0 loaded / 16 failed.
+
+## Summary title: Front-end request discipline, caching, retries and loading UX for e621 API
+
+### Date and time
+- 2026-10-26 UTC
+
+### Summarised context
+- Photo grid often sat on "Loading photos list…" for up to 2 minutes; network logs showed repeated identical requests, throttling and 503s (e621 limit ~2 req/s, 1 req/s recommended).
+- Audited every browser API call site: `/photos` list fetch, `/` reels feed, reels autocomplete (hidden UI) and `/settings` autocomplete. Each had its own `fetch` with no shared limiter, cache, timeout or retry.
+- Measured the old code with a Playwright harness (e621 mocked from real captured JSON) and probed the live API: `posts.json` sends `cache-control: max-age=0`, CORS exposes no response headers, autocomplete returns 400 for queries under 3 characters, an empty search returns `{"posts":[]}`, and page 751 returns 410.
+
+### Summarised reasoning
+- Root causes, by impact: (1) photo page paged forever on empty results (16 requests in 10 s, ~750 total); (2) no timeouts, so a hung request spun indefinitely; (3) an IntersectionObserver timer re-sent page 1 after 1.4 s and nothing recovered after a 503; (4) infinite scroll stalled at 36 photos because the observer never re-fired and calls made during a load were dropped; (5) no caching on reload/back; (6) autocomplete sent requests e621 rejects and never cancelled stale ones; (7) lightbox loaded three multi-MB originals at once; (8) reels hid all status/errors and downloaded one video twice through an `ensureSlide` race.
+- One shared client module beats per-page fixes: limiter, de-duplication, cache and retry policy can't drift between pages and is unit-testable. Served as a real ES module (wrangler Text rule) so Node tests import the exact shipped file.
+- Cache uses `sessionStorage` (per tab, cleared on close) rather than `localStorage`, given the site's privacy stance; privacy page updated to disclose it. No first-party telemetry beacon was added (that would change the privacy posture); diagnostics stay in the browser (`frApiStats()`).
+- Caller aborts cancel only queued/backoff waits: once a request is sent its rate-limit slot is spent, so it completes and is cached.
+- No third-party or analytics scripts exist in source or on the live site; no JS image concurrency queue was added because static media is a separate, non-rate-limited host, and native lazy loading plus HTTP/2 is faster.
+
+### Summarised changes
+- Added `src/client/e621-client.js` (cross-tab 1 req/s limiter, de-duplication, memory + session cache with stale fallback, 10 s timeouts, 3 attempts with jittered exponential backoff, throttle penalty, request log, URL builders, post mappers) and `src/client/photo-feed.js` (single in-flight page, end-of-results, 3-empty-page cap, 410 handling, slow flag, cache restore).
+- Added `src/assets.js` to serve client modules at content-hashed `/assets/<hash>/…` URLs with immutable caching; `wrangler.jsonc` Text rule for `src/client/*.js`.
+- Photo page: rewritten script (same DOM/CSS/lightbox behaviour), skeleton tiles, "taking longer than usual", retry progress, error box with "Try again", empty/end states, a single scroll-driven loop (no stall), 60 posts per request, back/reload restore of loaded pages and scroll position, preconnect/modulepreload, image fallback chain and "Image unavailable" tile, lightbox uses the ~850px sample and upgrades only the current image to the original when the screen needs it.
+- Reels: feed and autocomplete via the shared client (adds `_client`), restart aborts superseded requests and drops stale results, load-more failure no longer blanks the playing reel, visible feed status card with retry, `ensureSlide` race fixed.
+- Settings: autocomplete via the shared client with min length 3, caching and cancellation of superseded lookups.
+- Added `test/` (node:test, 33 tests) and `npm test`; README section on the client; privacy page storage disclosure (effective date updated).
+
+### Validation performed
+- `npm test` (33 pass) and `npm run check` (wrangler dry-run) pass.
+- Harness before → after: empty results 16 → 1 request; hang: endless spinner → error + retry at ~33 s; 503×2: dead end → recovered at ~3.7 s; scroll storm: stalled at 36 photos → 720 photos with ≥1 s spacing and never more than one request in flight; reload/back: 2 → 0 API requests with scroll position restored; lightbox open: 3 originals → 3 samples + 1 original; autocomplete "foxes" then backspacing to "fox": 7 → 3 requests; reels 503: blank → visible message + retry; isolated first-image time unchanged within noise (~550 → ~575 ms cold, including the module fetch).
