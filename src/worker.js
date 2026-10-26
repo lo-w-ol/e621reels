@@ -1,9 +1,14 @@
 import { handlePosts, handleTagAutocomplete } from './api.js';
+import { clientAssetUrl, serveClientAsset } from './assets.js';
 import { formatTagLabel, escapeHtml, serializeJsonLd, sanitizeTags, sanitizeRating, sanitizeRatioFilter, htmlHeaders } from './utils.js';
 
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/assets/')) {
+      return serveClientAsset(url) || new Response('Not found', { status: 404 });
+    }
 
     if (url.pathname === '/api/posts') {
       return handlePosts(request, url);
@@ -88,6 +93,9 @@ function renderApp(url) {
     <meta name="twitter:title" content="${escapeHtml(seo.title)}" />
     <meta name="twitter:description" content="${escapeHtml(seo.description)}" />
     <meta name="theme-color" content="#080808" />
+    <link rel="preconnect" href="https://e621.net" crossorigin />
+    <link rel="preconnect" href="https://static1.e621.net" />
+    <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}" />
     <script type="application/ld+json">${serializeJsonLd(seo.structuredData)}</script>
     <style>
       :root {
@@ -365,7 +373,7 @@ function renderApp(url) {
         backdrop-filter: blur(16px);
       }
       .privacy-note{margin:8px 0 0;color:var(--muted);font-size:.78rem;}
-      .privacy-note a{color:#fff}.ux-chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ux-chip{border:1px solid var(--outline);background:rgba(8,8,12,.5);color:var(--text);border-radius:999px;padding:8px 12px;font-size:.78rem;min-height:40px}.ux-chip.selected{background:var(--accent-soft);border-color:rgba(255,47,120,.5)}.ux-notice{margin-top:10px;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:rgba(8,8,12,.45);font-size:.8rem;line-height:1.4}.ux-notice[hidden]{display:none}.onboarding{position:absolute;inset:auto 12px calc(var(--safe-bottom) + 72px);z-index:20;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:12px;backdrop-filter:blur(14px)}.onboarding[hidden]{display:none}.onboarding h3{margin:0 0 6px;font-size:.95rem}.onboarding p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.onboarding-actions{display:flex;justify-content:flex-end;margin-top:10px}.focus-ring:focus-visible,.action-button:focus-visible,.global-menu-toggle:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+      .privacy-note a{color:#fff}.ux-chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ux-chip{border:1px solid var(--outline);background:rgba(8,8,12,.5);color:var(--text);border-radius:999px;padding:8px 12px;font-size:.78rem;min-height:40px}.ux-chip.selected{background:var(--accent-soft);border-color:rgba(255,47,120,.5)}.ux-notice{margin-top:10px;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:rgba(8,8,12,.45);font-size:.8rem;line-height:1.4}.ux-notice[hidden]{display:none}.onboarding{position:absolute;inset:auto 12px calc(var(--safe-bottom) + 72px);z-index:20;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:12px;backdrop-filter:blur(14px)}.onboarding[hidden]{display:none}.onboarding h3{margin:0 0 6px;font-size:.95rem}.onboarding p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.onboarding-actions{display:flex;justify-content:flex-end;margin-top:10px}.feed-status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;width:min(86%,340px);text-align:center;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:14px;backdrop-filter:blur(14px)}.feed-status[hidden],.feed-status button[hidden]{display:none}.feed-status strong{display:block;margin-bottom:6px;font-size:.95rem}.feed-status p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.feed-status button{margin-top:10px}.focus-ring:focus-visible,.action-button:focus-visible,.global-menu-toggle:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
       .credit a { color: #fff; }
       .scrub-hud {
         position: absolute;
@@ -719,6 +727,7 @@ function renderApp(url) {
             </div>
           </div>
         </section>
+        <div class="feed-status" id="feedStatus" role="status" aria-live="polite" hidden><strong id="feedStatusTitle"></strong><p id="feedStatusText"></p><button class="ux-chip focus-ring" id="feedRetryButton" type="button" hidden>Try again</button></div>
         <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up/down for next reel, drag sideways on video to scrub, tap mute, and use the menu to switch pages.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
         <div hidden aria-hidden="true">
           <div id="statusCard"><strong id="statusTitle"></strong><p id="statusText"></p></div>
@@ -744,10 +753,12 @@ function renderApp(url) {
     </noscript>
 
     <script>${renderFloatingNavScript()}</script>
-    <script>
-      const CLIENT_E621_API = 'https://e621.net/posts.json';
-      const CLIENT_E621_TAG_AUTOCOMPLETE_API = 'https://e621.net/tags/autocomplete.json';
-      const CLIENT_SUPPORTED_MEDIA = new Set(['webm', 'mp4', 'gif']);
+    <script type="module">
+      import { getBrowserClient, fetchPostsPage, fetchTagSuggestions, describeApiError, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';
+
+      const apiClient = getBrowserClient();
+      const REEL_PAGE_SIZE = 24;
+      const SLOW_FEED_MS = 4000;
       const SWIPE_THRESHOLD = 90;
       const DRAG_LOCK_THRESHOLD = 12;
       const TAP_DISTANCE_THRESHOLD = 10;
@@ -757,7 +768,6 @@ function renderApp(url) {
       const MIN_VIDEO_PLAYBACK_MS = 10000;
       const TRACK_TRANSITION_MS = 320;
       const TRACK_TRANSITION_FALLBACK_MS = TRACK_TRANSITION_MS + 120;
-      const TAG_AUTOCOMPLETE_LIMIT = 8;
       const AUTOCOMPLETE_DEBOUNCE_MS = 160;
       const INITIAL_MODE = ${JSON.stringify(seo.initialModeForClient)};
       const INITIAL_TAGS = ${JSON.stringify(seo.initialTagsForClient)};
@@ -771,6 +781,8 @@ function renderApp(url) {
         currentIndex: 0,
         nextPage: 1,
         loading: false,
+        feedGeneration: 0,
+        feedAbort: null,
         mode: bootSettings.shared.sort || INITIAL_MODE,
         tags: bootSettings.shared.tags || INITIAL_TAGS,
         rating: bootSettings.shared.rating || INITIAL_RATING,
@@ -804,6 +816,7 @@ function renderApp(url) {
           open: false,
           requestId: 0,
           debounceTimer: null,
+          abort: null,
           query: '',
         },
       };
@@ -817,6 +830,10 @@ function renderApp(url) {
       const statusCard = document.getElementById('statusCard');
       const statusTitle = document.getElementById('statusTitle');
       const statusText = document.getElementById('statusText');
+      const feedStatus = document.getElementById('feedStatus');
+      const feedStatusTitle = document.getElementById('feedStatusTitle');
+      const feedStatusText = document.getElementById('feedStatusText');
+      const feedRetryButton = document.getElementById('feedRetryButton');
       const tagList = document.getElementById('tagList');
       const nextButton = document.getElementById('nextButton');
       const previousButton = document.getElementById('previousButton');
@@ -949,6 +966,7 @@ function renderApp(url) {
       });
 
       dismissOnboarding.addEventListener('click', dismissOnboardingGuide);
+      feedRetryButton.addEventListener('click', () => restartFeed());
       tagsInput.addEventListener('input', () => scheduleTagAutocomplete());
       tagsInput.addEventListener('focus', () => scheduleTagAutocomplete(true));
       tagsInput.addEventListener('blur', () => {
@@ -1295,47 +1313,23 @@ function renderApp(url) {
           return;
         }
         const requestId = ++state.tagAutocomplete.requestId;
+        // A newer keystroke cancels the older lookup before it uses a request slot.
+        if (state.tagAutocomplete.abort) state.tagAutocomplete.abort.abort();
+        const controller = new AbortController();
+        state.tagAutocomplete.abort = controller;
         try {
-          const items = await fetchTagAutocomplete(token);
+          const items = await fetchTagSuggestions(apiClient, token, { signal: controller.signal });
           if (requestId !== state.tagAutocomplete.requestId) return;
           state.tagAutocomplete.items = items;
           state.tagAutocomplete.activeIndex = items.length ? 0 : -1;
           renderTagAutocomplete();
         } catch (error) {
-          console.warn('Tag autocomplete failed', error);
-          if (requestId !== state.tagAutocomplete.requestId) return;
+          if (isAbortError(error) || requestId !== state.tagAutocomplete.requestId) return;
+          console.warn('Tag autocomplete failed', { kind: error.kind, status: error.status });
           state.tagAutocomplete.items = [];
           state.tagAutocomplete.activeIndex = -1;
           renderTagAutocomplete('Could not load tag suggestions right now.');
         }
-      }
-
-      async function fetchTagAutocomplete(query) {
-        const upstreamUrl = new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);
-        upstreamUrl.searchParams.set('search[name_matches]', query + '*');
-        const response = await fetch(upstreamUrl.toString(), {
-          headers: { Accept: 'application/json' },
-        });
-        const payload = await parseJsonSafely(response);
-        if (!response.ok) {
-          throw createFetchError('Direct tag autocomplete failed', {
-            url: upstreamUrl.toString(),
-            status: response.status,
-            payload,
-          });
-        }
-        return Array.isArray(payload)
-          ? payload
-              .filter((tag) => tag && typeof tag.name === 'string')
-              .slice(0, TAG_AUTOCOMPLETE_LIMIT)
-              .map((tag) => ({
-                id: tag.id || null,
-                name: tag.name,
-                category: Number.isFinite(tag.category) ? tag.category : null,
-                postCount: Number.isFinite(tag.post_count) ? tag.post_count : 0,
-                antecedentName: tag.antecedent_name || null,
-              }))
-          : [];
       }
 
       function handleAutocompleteKeydown(event) {
@@ -1467,6 +1461,7 @@ function renderApp(url) {
       }
 
       async function restartFeed() {
+        state.feedGeneration += 1;
         clearTimers();
         state.posts = [];
         state.currentIndex = 0;
@@ -1480,9 +1475,19 @@ function renderApp(url) {
         await loadPosts(true);
       }
 
+      // A restart (replace) supersedes any in-flight page: the old request is aborted and its late result
+      // dropped, instead of the new filters being silently ignored while the old request finishes.
       async function loadPosts(replace = false) {
-        if (state.loading) return;
+        if (state.loading && !replace) return;
+        if (state.feedAbort) state.feedAbort.abort();
+        const controller = new AbortController();
+        const generation = state.feedGeneration;
+        const showProgress = replace || !state.posts.length;
+        state.feedAbort = controller;
         state.loading = true;
+        const slowTimer = showProgress
+          ? setTimeout(() => renderStatus('Taking longer than usual', 'e621 is responding slowly. Still trying…'), SLOW_FEED_MS)
+          : null;
         try {
           const params = new URLSearchParams({
             mode: state.mode,
@@ -1492,11 +1497,20 @@ function renderApp(url) {
           if (state.rating) params.set('rating', state.rating);
           if (state.ratio) params.set('ratio', state.ratio);
 
-
-          const { data, source } = await fetchPostsPreferDirect(params);
-          const incoming = Array.isArray(data.posts) ? data.posts : [];
-          state.lastFeedSource = source;
-
+          const { data } = await fetchPostsPage(apiClient, {
+            view: 'reels',
+            tags: buildApiTags(params),
+            page: state.nextPage,
+            limit: REEL_PAGE_SIZE,
+            signal: controller.signal,
+            onStatus: (status) => {
+              if (!showProgress || status.phase !== 'retrying') return;
+              renderStatus('Retrying…', describeApiError(status.error) + '. Trying again (attempt ' + status.nextAttempt + ' of ' + status.maxAttempts + ').');
+            },
+          });
+          if (generation !== state.feedGeneration) return;
+          const incoming = data.posts;
+          state.lastFeedSource = 'client-direct';
 
           if (replace) {
             state.posts = incoming;
@@ -1517,55 +1531,18 @@ function renderApp(url) {
             schedulePreloadAroundIndex(state.currentIndex);
           }
         } catch (error) {
-          console.error('[feed] request failed', { message: error instanceof Error ? error.message : String(error) });
-          renderEmpty('Could not load posts', 'Could not load content right now. Try again shortly.');
+          if (isAbortError(error) || generation !== state.feedGeneration) return;
+          console.error('[feed] request failed', { kind: error.kind, status: error.status });
+          // A failed "load more" keeps the reel that is playing; the next swipe near the end tries again.
+          if (state.posts.length && !replace) return;
+          renderEmpty('Could not load posts', describeApiError(error) + '. Try again in a moment.', { retry: true });
         } finally {
-          state.loading = false;
+          clearTimeout(slowTimer);
+          if (state.feedAbort === controller) {
+            state.feedAbort = null;
+            state.loading = false;
+          }
         }
-      }
-
-      async function fetchPostsPreferDirect(params) {
-        const directData = await fetchPostsDirectly(params);
-        return { data: directData, source: 'client-direct' };
-      }
-
-      async function fetchPostsDirectly(params) {
-        const upstreamUrl = new URL(CLIENT_E621_API);
-        upstreamUrl.searchParams.set('limit', '24');
-        upstreamUrl.searchParams.set('page', params.get('page'));
-        upstreamUrl.searchParams.set('tags', buildApiTags(params));
-
-
-        const upstreamResponse = await fetch(upstreamUrl.toString(), {
-          headers: { Accept: 'application/json' },
-        });
-        const upstreamPayload = await parseJsonSafely(upstreamResponse);
-
-        if (!upstreamResponse.ok) {
-          const directError = createFetchError('Direct e621 request failed', {
-            url: upstreamUrl.toString(),
-            status: upstreamResponse.status,
-            payload: upstreamPayload,
-          });
-          console.error('[feed] direct request failed', { status: upstreamResponse.status });
-          throw directError;
-        }
-
-        const posts = Array.isArray(upstreamPayload && upstreamPayload.posts)
-          ? upstreamPayload.posts
-              .filter((post) => post && post.file && post.file.url && CLIENT_SUPPORTED_MEDIA.has(String(post.file.ext || '').toLowerCase()))
-              .map((post) => mapApiPost(post))
-          : [];
-
-        return {
-          mode: params.get('mode') === 'score' ? 'score' : 'trending',
-          page: Number(params.get('page') || '1'),
-          tags: sanitizeClientTags(params.get('tags') || ''),
-          rating: sanitizeClientRating(params.get('rating')),
-          ratio: sanitizeRatioFilter(params.get('ratio')),
-          posts,
-          source: 'client-direct',
-        };
       }
 
       function buildApiTags(params) {
@@ -1597,67 +1574,25 @@ function renderApp(url) {
         return ['vertical', 'landscape'].includes(value) ? value : '';
       }
 
-      function sanitizeAutocompleteQuery(value) {
-        return String(value || '')
-          .trim()
-          .toLowerCase()
-          .replace(/\\s+/g, '_')
-          .replace(/[^a-z0-9_:()'-]/g, '')
-          .slice(0, 64);
-      }
-
-      function mapApiPost(post) {
-        const ext = String((post.file && post.file.ext) || '').toLowerCase();
-        const artist = Array.isArray(post.tags && post.tags.artist) ? post.tags.artist.filter(Boolean) : [];
-        const species = Array.isArray(post.tags && post.tags.species) ? post.tags.species.filter(Boolean) : [];
-        const general = Array.isArray(post.tags && post.tags.general) ? post.tags.general.filter(Boolean).slice(0, 12) : [];
-
-        return {
-          id: post.id,
-          ext,
-          type: ['webm', 'mp4'].includes(ext) ? 'video' : 'image',
-          score: (post.score && post.score.total) || 0,
-          rating: post.rating || 'u',
-          width: (post.file && post.file.width) || (post.sample && post.sample.width) || 0,
-          height: (post.file && post.file.height) || (post.sample && post.sample.height) || 0,
-          createdAt: post.created_at,
-          mediaUrl: post.file.url,
-          previewUrl: (post.preview && post.preview.url) || (post.sample && post.sample.url) || post.file.url,
-          sourceUrl: 'https://e621.net/posts/' + post.id,
-          description: [
-            artist.length ? 'Artist: ' + artist.join(', ') : 'Artist unknown',
-            species.length ? 'Species: ' + species.slice(0, 3).join(', ') : null,
-          ].filter(Boolean).join(' • '),
-          tags: artist.map((tag) => 'artist:' + tag).concat(general),
-        };
-      }
-
-      async function parseJsonSafely(response) {
-        const text = await response.text();
-        if (!text) return null;
-        try {
-          return JSON.parse(text);
-        } catch (error) {
-          return { rawText: text };
-        }
-      }
-
-      function createFetchError(message, context) {
-        const error = new Error(message);
-        error.context = context;
-        return error;
-      }
-
-      function renderStatus(title, body) {
+      function renderStatus(title, body, { retry = false } = {}) {
         statusCard.hidden = false;
         statusTitle.textContent = title;
         statusText.textContent = body;
+        feedStatus.hidden = false;
+        feedStatusTitle.textContent = title;
+        feedStatusText.textContent = body;
+        feedRetryButton.hidden = !retry;
       }
 
-      function renderEmpty(title, body) {
+      function hideStatus() {
+        statusCard.hidden = true;
+        feedStatus.hidden = true;
+      }
+
+      function renderEmpty(title, body, options = {}) {
         reelTrack.innerHTML = '';
         clearTimers();
-        renderStatus(title, body);
+        renderStatus(title, body, options);
         postTitle.textContent = title;
         postDescription.textContent = body;
         tagList.innerHTML = '';
@@ -1745,7 +1680,7 @@ function renderApp(url) {
         if (!post) return;
 
         const navigationToken = ++state.navigationToken;
-        statusCard.hidden = true;
+        hideStatus();
         const previousIndex = state.currentIndex;
         const direction = index > previousIndex ? 1 : index < previousIndex ? -1 : 0;
         const movement = options.immediate || direction === 0 ? 0 : direction;
@@ -1815,11 +1750,13 @@ function renderApp(url) {
         state.currentMedia = media;
       }
 
+      // Registers the slide synchronously: with an await before preloaded.set(), two callers in the same
+      // tick each created a <video> and downloaded the same file twice.
       async function ensureSlide(index) {
         if (state.preloaded.has(index)) {
           return state.preloaded.get(index);
         }
-        const entry = await createSlide(state.posts[index]);
+        const entry = createSlide(state.posts[index]);
         state.preloaded.set(index, entry);
         prunePreloaded(index);
         return entry;
@@ -1855,7 +1792,7 @@ function renderApp(url) {
         });
       }
 
-      async function createSlide(post) {
+      function createSlide(post) {
         const slide = document.createElement('article');
         slide.className = 'reel-slide loading';
         slide.style.setProperty('--preview-image', post.previewUrl ? 'url("' + post.previewUrl.replace(/"/g, '\\"') + '")' : 'none');
@@ -2116,32 +2053,450 @@ function renderApp(url) {
 }
 
 function renderPhotoGridPage(url) {
+  const skeletonTiles = '<div class="tile skeleton" aria-hidden="true"></div>'.repeat(12);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox.open{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}</style></head>
-  <body>${renderFloatingNav('photos')}<div class="frame"><main class="grid" id="grid"></main>
-  <div class="status" id="status">Loading photos…</div><pre class="error" id="errorBox" hidden></pre>
+  <link rel="preconnect" href="https://e621.net" crossorigin/><link rel="preconnect" href="https://static1.e621.net"/>
+  <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}"/><link rel="modulepreload" href="${clientAssetUrl('photo-feed.js')}"/>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox.open{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}
+  .error[hidden]{display:none}.tile.skeleton{cursor:default;background:linear-gradient(100deg,#101014 30%,#1b1b22 50%,#101014 70%);background-size:300% 100%;animation:tile-shimmer 1.3s linear infinite}@keyframes tile-shimmer{from{background-position:100% 0}to{background-position:0 0}}@media (prefers-reduced-motion:reduce){.tile.skeleton{animation:none}}.tile.broken{display:grid;place-items:center;color:rgba(255,255,255,.45);font-size:.8rem}.tile.broken::after{content:'Image unavailable'}.retry-btn{display:block;margin-top:8px;border:1px solid rgba(255,255,255,.3);background:#1a1a24;color:#fff;border-radius:8px;padding:6px 12px;font:600 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer}.retry-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}</style></head>
+  <body>${renderFloatingNav('photos')}<div class="frame"><main class="grid" id="grid" aria-busy="true">${skeletonTiles}</main>
+  <div class="status" id="status" role="status" aria-live="polite">Loading photos…</div><div class="error" id="errorBox" role="alert" hidden><span id="errorText"></span><button type="button" class="retry-btn" id="retryButton">Try again</button></div>
   <div class="lightbox" id="lightbox"><div class="swipe-arrow left">‹</div><div class="swipe-arrow right">›</div><div class="down-hint" id="downHint">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div><div class="credit" id="lightboxCredit"></div></div>
-  <script>${renderFloatingNavScript()}</script><script>const grid=document.getElementById('grid');const status=document.getElementById('status');const errorBox=document.getElementById('errorBox');const lightbox=document.getElementById('lightbox');const lightboxTrack=document.getElementById('lightboxTrack');const lightboxCredit=document.getElementById('lightboxCredit');const downHint=document.getElementById('downHint');let page=1,loading=false,loaded=0,pendingPosts=[],inflightTimer=null,lightboxIndex=-1,allPosts=[];let touchStartY=0;let lightboxTouchStartX=0;let lightboxTouchStartY=0;let lightboxTouchActive=false;let lightboxBaseX=0;function showError(){errorBox.hidden=false;errorBox.textContent='Could not load content right now. Try again shortly.'}function loadSettings(){const d={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...d,...p,shared:{...d.shared,...(p.shared||{})},photos:{...d.photos,...(p.photos||{})}}}catch{return d}}function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}function photoTagsFromUrl(){const settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(window.location.href));const raw=(settings.shared.tags||'').trim().split(/\\s+/).filter(Boolean);const rating=(settings.shared.rating||'').trim().toLowerCase();const ratio=(settings.shared.ratio||'').trim().toLowerCase();const tags=[settings.shared.sort==='score'?'order:score':'order:rank','-animated',...raw];if(rating==='s'||rating==='q'||rating==='e')tags.push('rating:'+rating);if(ratio==='vertical')tags.push('ratio:<1');if(ratio==='landscape')tags.push('ratio:>1');return tags.join(' ');}function mapApiPost(post){const artists=post&&post.tags&&Array.isArray(post.tags.artist)?post.tags.artist.filter(Boolean):[];return{id:post.id,mediaUrl:post.file&&post.file.url?post.file.url:'',previewUrl:(post.preview&&post.preview.url)||(post.sample&&post.sample.url)||(post.file&&post.file.url)||'',ext:String(post.file&&post.file.ext?post.file.ext:'').toLowerCase(),sourceUrl:'https://e621.net/posts/'+post.id,artistText:artists.length?artists.join(', '):'Unknown artist'};}function buildLightboxSlide(post){const slide=document.createElement('div');slide.className='lightbox-slide';const image=document.createElement('img');image.alt='Expanded image '+(post.id||'');image.src=post.mediaUrl||post.previewUrl;image.addEventListener('load',()=>{downHint.classList.toggle('show',image.naturalHeight>image.naturalWidth*1.45);},{once:true});slide.appendChild(image);return slide;}function updateLightboxCredit(post){lightboxCredit.textContent='';const artist=document.createTextNode('Artist: '+post.artistText+' • ');const link=document.createElement('a');link.href=post.sourceUrl;link.target='_blank';link.rel='noreferrer noopener';link.textContent='View post';lightboxCredit.append(artist,link);}function setLightboxTrack(offsetPx,animated){lightboxTrack.classList.toggle('animating',Boolean(animated));lightboxTrack.style.transform='translate3d('+offsetPx+'px,0,0)';}function currentBase(){return allPosts[lightboxIndex-1]?-window.innerWidth:0;}function renderLightboxAt(index){if(index<0||index>=allPosts.length)return;lightboxIndex=index;const prev=allPosts[index-1]||null;const current=allPosts[index];const next=allPosts[index+1]||null;lightboxTrack.innerHTML='';if(prev)lightboxTrack.appendChild(buildLightboxSlide(prev));lightboxTrack.appendChild(buildLightboxSlide(current));if(next)lightboxTrack.appendChild(buildLightboxSlide(next));lightboxBaseX=currentBase();setLightboxTrack(lightboxBaseX,false);updateLightboxCredit(current);}function openLightbox(index){if(index<0||index>=allPosts.length)return;renderLightboxAt(index);lightbox.classList.add('open');}function closeLightbox(){lightbox.classList.remove('open');lightboxTrack.innerHTML='';lightboxIndex=-1;downHint.classList.remove('show');}function settleMove(delta){if(lightboxIndex<0)return;const next=lightboxIndex+delta;if(next<0||next>=allPosts.length){setLightboxTrack(lightboxBaseX,true);return;}const target=delta>0?lightboxBaseX-window.innerWidth:lightboxBaseX+window.innerWidth;setLightboxTrack(target,true);setTimeout(()=>{renderLightboxAt(next);},280);}function flushFromList(maxItems){let added=0;while(pendingPosts.length&&added<maxItems){const p=pendingPosts.shift();const src=p&&(p.previewUrl||p.mediaUrl);if(!src)continue;const postIndex=allPosts.push(p)-1;const t=document.createElement('article');t.className='tile';t.dataset.index=String(postIndex);const i=document.createElement('img');i.loading='lazy';i.src=src;i.alt='e621 image '+(p.id||'');t.appendChild(i);grid.appendChild(t);loaded++;added++;}status.textContent=loaded>0?('Loaded '+loaded+' photos • queue '+pendingPosts.length):'Loading photos…';}async function fetchNextListPage(){if(loading)return;loading=true;errorBox.hidden=true;status.textContent='Loading photos list…';const upstreamUrl=new URL('https://e621.net/posts.json');upstreamUrl.searchParams.set('limit','24');upstreamUrl.searchParams.set('page',String(page));upstreamUrl.searchParams.set('tags',photoTagsFromUrl());upstreamUrl.searchParams.set('_client','FurryReel/1.0 (contact: support@furryreel.com)');try{const res=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});let payload=null;try{payload=await res.json()}catch(parseErr){throw new Error('Could not parse e621 response as JSON. status='+res.status+' '+res.statusText+' url='+upstreamUrl.toString())}if(!res.ok){throw new Error('Direct e621 error: http='+res.status+' details='+(payload&&payload.reason?payload.reason:'(none)')+' request='+upstreamUrl.toString())}const posts=Array.isArray(payload.posts)?payload.posts:[];const usable=posts.map(mapApiPost).filter((p)=>['jpg','jpeg','png','webp'].includes(p.ext)&&Boolean(p.mediaUrl||p.previewUrl));pendingPosts.push(...usable);if(!usable.length&&loaded===0){status.textContent='No static image posts on this page; auto-trying next page…';page++;scheduleFetch(350);loading=false;return;}flushFromList(18);page++;}catch(err){console.error('photo-grid load failed',{message:String(err&&err.message?err.message:err)});status.textContent='Could not load content right now. Try again shortly.';showError();}finally{loading=false;}}function scheduleFetch(delayMs){if(inflightTimer)clearTimeout(inflightTimer);inflightTimer=setTimeout(()=>{fetchNextListPage()},delayMs);}grid.addEventListener('click',(event)=>{const tile=event.target.closest('.tile');if(!tile)return;openLightbox(Number(tile.dataset.index||'-1'));});lightbox.addEventListener('click',(event)=>{if(event.target===lightbox||event.target===lightboxCredit)closeLightbox();});document.addEventListener('keydown',(event)=>{if(!lightbox.classList.contains('open'))return;if(event.key==='Escape')closeLightbox();if(event.key==='ArrowDown'||event.key==='ArrowRight')settleMove(1);if(event.key==='ArrowUp'||event.key==='ArrowLeft')settleMove(-1);});lightbox.addEventListener('touchstart',(event)=>{if(!lightbox.classList.contains('open'))return;lightboxTouchActive=true;lightboxTouchStartX=event.touches[0].clientX;lightboxTouchStartY=event.touches[0].clientY;lightboxBaseX=currentBase();lightboxTrack.classList.remove('animating');},{passive:true});lightbox.addEventListener('touchmove',(event)=>{if(!lightboxTouchActive)return;const dx=event.touches[0].clientX-lightboxTouchStartX;const dy=event.touches[0].clientY-lightboxTouchStartY;if(Math.abs(dx)>=Math.abs(dy)){event.preventDefault();setLightboxTrack(lightboxBaseX+dx,false);}},{passive:false});lightbox.addEventListener('touchend',(event)=>{if(!lightboxTouchActive)return;lightboxTouchActive=false;const dx=event.changedTouches[0].clientX-lightboxTouchStartX;const dy=event.changedTouches[0].clientY-lightboxTouchStartY;const threshold=window.innerWidth*0.4;if(Math.abs(dx)>=Math.abs(dy)){if(dx<=-threshold){settleMove(1);return;}if(dx>=threshold){settleMove(-1);return;}setLightboxTrack(lightboxBaseX,true);return;}setLightboxTrack(lightboxBaseX,true);},{passive:true});const io=new IntersectionObserver((e)=>{if(!e[0].isIntersecting)return;if(pendingPosts.length>8){flushFromList(18);return;}scheduleFetch(1400);},{rootMargin:'1000px'});const sentinel=document.createElement('div');grid.after(sentinel);io.observe(sentinel);fetchNextListPage();</script></div></body></html>`;
+  <script>${renderFloatingNavScript()}</script><script type="module">
+import { getBrowserClient, describeApiError } from '${clientAssetUrl('e621-client.js')}';
+import { createPhotoFeed, photoTagsFromSettings } from '${clientAssetUrl('photo-feed.js')}';
+
+const grid = document.getElementById('grid');
+const status = document.getElementById('status');
+const errorBox = document.getElementById('errorBox');
+const errorText = document.getElementById('errorText');
+const retryButton = document.getElementById('retryButton');
+const lightbox = document.getElementById('lightbox');
+const lightboxTrack = document.getElementById('lightboxTrack');
+const lightboxCredit = document.getElementById('lightboxCredit');
+const downHint = document.getElementById('downHint');
+const BATCH_SIZE = 18;
+const LOOKAHEAD_PX = 1000;
+const SKELETON_COUNT = 6;
+const EAGER_TILES = 8;
+const allPosts = [];
+let lightboxIndex = -1;
+let lightboxTouchStartX = 0;
+let lightboxTouchStartY = 0;
+let lightboxTouchActive = false;
+let lightboxBaseX = 0;
+let originalLoader = null;
+let firstPhotoMarked = false;
+let pumping = false;
+let pumpAgain = false;
+let saveTimer = null;
+
+function loadSettings() {
+  const d = { shared: { tags: '', sort: 'trending', rating: '', ratio: '', syncUrl: true }, reels: { fitMedia: true, muted: true, onboardingSeen: false }, photos: { gridDensity: 'comfortable', fitImages: 'crop' } };
+  try {
+    const p = JSON.parse(localStorage.getItem('fr_settings_v1') || '{}');
+    return { ...d, ...p, shared: { ...d.shared, ...(p.shared || {}) }, photos: { ...d.photos, ...(p.photos || {}) } };
+  } catch {
+    return d;
+  }
 }
 
+function mergeUrlParamsIntoSettings(settings, url) {
+  const m = url.searchParams.get('mode');
+  const t = (url.searchParams.get('tags') || '').trim();
+  const r = (url.searchParams.get('rating') || '').trim().toLowerCase();
+  const ra = (url.searchParams.get('ratio') || '').trim().toLowerCase();
+  if (m === 'score' || m === 'trending') settings.shared.sort = m;
+  if (t) settings.shared.tags = t;
+  if (['s', 'q', 'e'].includes(r)) settings.shared.rating = r;
+  if (['vertical', 'landscape'].includes(ra)) settings.shared.ratio = ra;
+  return settings;
+}
+
+const tags = photoTagsFromSettings(mergeUrlParamsIntoSettings(loadSettings(), new URL(window.location.href)).shared);
+const client = getBrowserClient();
+const feed = createPhotoFeed({ client, tags, onChange: renderStatus });
+const sentinel = document.createElement('div');
+grid.after(sentinel);
+
+function uniqueUrls(urls) {
+  return urls.filter((value, index) => value && urls.indexOf(value) === index);
+}
+
+// Tries each URL in turn, because e621 occasionally lacks a preview or sample file.
+function setImageWithFallback(image, urls, onGiveUp) {
+  let index = 0;
+  const next = () => {
+    index += 1;
+    if (index < urls.length) {
+      image.src = urls[index];
+      return;
+    }
+    image.removeEventListener('error', next);
+    onGiveUp();
+  };
+  if (!urls.length) {
+    onGiveUp();
+    return;
+  }
+  image.addEventListener('error', next);
+  image.src = urls[0];
+}
+
+function markFirstPhoto() {
+  if (firstPhotoMarked) return;
+  firstPhotoMarked = true;
+  performance.mark('fr:first-photo');
+  client.log.record({ label: 'photos', outcome: 'first-image', ms: Math.round(performance.now()) });
+}
+
+function removeSkeletons() {
+  grid.querySelectorAll('.tile.skeleton').forEach((tile) => tile.remove());
+}
+
+function showSkeletons() {
+  if (grid.querySelector('.tile.skeleton')) return;
+  for (let i = 0; i < SKELETON_COUNT; i += 1) {
+    const tile = document.createElement('div');
+    tile.className = 'tile skeleton';
+    tile.setAttribute('aria-hidden', 'true');
+    grid.appendChild(tile);
+  }
+}
+
+function renderTiles(posts) {
+  removeSkeletons();
+  const fragment = document.createDocumentFragment();
+  posts.forEach((post) => {
+    const postIndex = allPosts.push(post) - 1;
+    const tile = document.createElement('article');
+    tile.className = 'tile';
+    tile.dataset.index = String(postIndex);
+    const image = document.createElement('img');
+    image.alt = 'e621 image ' + (post.id || '');
+    image.width = 256;
+    image.height = 256;
+    image.decoding = 'async';
+    image.loading = postIndex < EAGER_TILES ? 'eager' : 'lazy';
+    if (postIndex < EAGER_TILES) image.fetchPriority = 'high';
+    image.addEventListener('load', markFirstPhoto, { once: true });
+    tile.appendChild(image);
+    setImageWithFallback(image, uniqueUrls([post.previewUrl, post.sampleUrl, post.fileUrl]), () => {
+      image.remove();
+      tile.classList.add('broken');
+    });
+    fragment.appendChild(tile);
+  });
+  grid.appendChild(fragment);
+}
+
+function minutesAgo(timestamp) {
+  return Math.max(1, Math.round((Date.now() - timestamp) / 60000)) + ' min ago';
+}
+
+function showError(message) {
+  errorText.textContent = message;
+  errorBox.hidden = false;
+}
+
+function renderStatus() {
+  const state = feed.state;
+  const loaded = allPosts.length;
+  const queued = feed.queue.length;
+  const loading = state.phase === 'loading';
+  grid.setAttribute('aria-busy', loading ? 'true' : 'false');
+  errorBox.hidden = true;
+  if (!loading) removeSkeletons();
+  if (loading) {
+    if (state.attempt > 1) status.textContent = describeApiError(state.retryError) + ' — retrying (attempt ' + state.attempt + ' of ' + state.maxAttempts + ')…';
+    else if (state.slow) status.textContent = 'Taking longer than usual — e621 is responding slowly. Still trying…';
+    else status.textContent = loaded ? 'Loading more photos…' : 'Loading photos…';
+    return;
+  }
+  if (state.phase === 'error') {
+    status.textContent = loaded ? 'Loaded ' + loaded + ' photos • could not load more' : 'Could not load photos.';
+    showError(describeApiError(state.error) + '. Try again in a moment.');
+    return;
+  }
+  if (state.staleSince) showError('Showing saved results from ' + minutesAgo(state.staleSince) + ' because ' + describeApiError(state.error) + '.');
+  if (state.phase === 'done' && !loaded && !queued) {
+    status.textContent = (state.endReason === 'sparse' ? 'No image posts found' : 'No photos match') + ' these filters. Try different tags in Settings.';
+    return;
+  }
+  if (state.phase === 'done' && !queued) {
+    status.textContent = 'Loaded ' + loaded + ' photos • end of results';
+    return;
+  }
+  status.textContent = loaded > 0 ? 'Loaded ' + loaded + ' photos • queue ' + queued : 'Loading photos…';
+}
+
+function nearBottom() {
+  return sentinel.getBoundingClientRect().top < window.innerHeight + LOOKAHEAD_PX;
+}
+
+// Lets the browser paint the batch and start its image requests before the next one; the timeout keeps
+// background tabs (no animation frames) moving.
+function nextFrame() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+    setTimeout(resolve, 100);
+  });
+}
+
+// The only loop that renders queued photos or asks for another page, and only while the user is near
+// the bottom. It re-checks the position after every step, so it cannot stall waiting for an observer
+// callback that never comes, and the feed itself allows one page request at a time.
+async function pump() {
+  if (pumping) {
+    pumpAgain = true;
+    return;
+  }
+  pumping = true;
+  try {
+    do {
+      pumpAgain = false;
+      while (nearBottom()) {
+        if (feed.queue.length) {
+          renderTiles(feed.take(BATCH_SIZE));
+          renderStatus();
+          await nextFrame();
+          continue;
+        }
+        if (!feed.canLoad) break;
+        showSkeletons();
+        if ((await feed.loadNextPage()) === null) break;
+      }
+    } while (pumpAgain);
+  } finally {
+    pumping = false;
+  }
+}
+
+retryButton.addEventListener('click', () => {
+  if (feed.state.phase !== 'error') {
+    // Saved results are on screen; a reload asks e621 again for anything no longer fresh.
+    window.location.reload();
+    return;
+  }
+  feed.clearError();
+  pump();
+});
+
+function saveGridPosition() {
+  try {
+    history.replaceState({ ...(history.state || {}), frPhotos: { tags, pages: feed.pagesLoaded, scrollY: Math.round(window.scrollY) } }, '');
+  } catch {
+    // Browsers rate-limit replaceState; losing the saved position is harmless.
+  }
+}
+
+// Back/reload: re-render the pages already loaded (from cache, no requests) and return to the same spot.
+function restoreGridPosition() {
+  const saved = history.state && history.state.frPhotos;
+  if (!saved || saved.tags !== tags || !(saved.pages > 0)) return;
+  if (!feed.restore(saved.pages)) return;
+  renderTiles(feed.take(Infinity));
+  renderStatus();
+  window.scrollTo(0, saved.scrollY || 0);
+}
+
+window.addEventListener('scroll', () => {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveGridPosition();
+  }, 1000);
+}, { passive: true });
+window.addEventListener('pagehide', saveGridPosition);
+
+function lightboxUrls(post) {
+  return uniqueUrls([post.sampleUrl, post.fileUrl, post.previewUrl]);
+}
+
+// The ~850px sample is enough for most screens. The original (often several MB) is fetched only for
+// the image being viewed, and only when the screen is wider than the sample.
+function wantsOriginal(post) {
+  if (!post.fileUrl || !post.sampleUrl || !post.sampleWidth) return false;
+  const neededPx = window.innerWidth * Math.min(window.devicePixelRatio || 1, 2);
+  return post.width > post.sampleWidth && neededPx > post.sampleWidth * 1.1;
+}
+
+function cancelOriginal() {
+  if (!originalLoader) return;
+  originalLoader.src = '';
+  originalLoader = null;
+}
+
+function upgradeToOriginal(image, post) {
+  cancelOriginal();
+  const loader = new Image();
+  originalLoader = loader;
+  loader.src = post.fileUrl;
+  loader.decode().then(() => {
+    if (originalLoader !== loader) return;
+    originalLoader = null;
+    if (image.isConnected) image.src = post.fileUrl;
+  }, () => {
+    if (originalLoader === loader) originalLoader = null;
+  });
+}
+
+function buildLightboxSlide(post, isCurrent) {
+  const slide = document.createElement('div');
+  slide.className = 'lightbox-slide';
+  const image = document.createElement('img');
+  image.alt = 'Expanded image ' + (post.id || '');
+  image.decoding = 'async';
+  if (post.width && post.height) {
+    image.width = post.width;
+    image.height = post.height;
+  }
+  setImageWithFallback(image, lightboxUrls(post), () => {});
+  if (isCurrent && wantsOriginal(post)) upgradeToOriginal(image, post);
+  slide.appendChild(image);
+  return slide;
+}
+
+function updateLightboxCredit(post) {
+  lightboxCredit.textContent = '';
+  const artist = document.createTextNode('Artist: ' + post.artistText + ' • ');
+  const link = document.createElement('a');
+  link.href = post.sourceUrl;
+  link.target = '_blank';
+  link.rel = 'noreferrer noopener';
+  link.textContent = 'View post';
+  lightboxCredit.append(artist, link);
+}
+
+function setLightboxTrack(offsetPx, animated) {
+  lightboxTrack.classList.toggle('animating', Boolean(animated));
+  lightboxTrack.style.transform = 'translate3d(' + offsetPx + 'px,0,0)';
+}
+
+function currentBase() {
+  return allPosts[lightboxIndex - 1] ? -window.innerWidth : 0;
+}
+
+function renderLightboxAt(index) {
+  if (index < 0 || index >= allPosts.length) return;
+  lightboxIndex = index;
+  const prev = allPosts[index - 1] || null;
+  const current = allPosts[index];
+  const next = allPosts[index + 1] || null;
+  cancelOriginal();
+  lightboxTrack.innerHTML = '';
+  if (prev) lightboxTrack.appendChild(buildLightboxSlide(prev, false));
+  lightboxTrack.appendChild(buildLightboxSlide(current, true));
+  if (next) lightboxTrack.appendChild(buildLightboxSlide(next, false));
+  downHint.classList.toggle('show', current.height > current.width * 1.45);
+  lightboxBaseX = currentBase();
+  setLightboxTrack(lightboxBaseX, false);
+  updateLightboxCredit(current);
+}
+
+function openLightbox(index) {
+  if (index < 0 || index >= allPosts.length) return;
+  renderLightboxAt(index);
+  lightbox.classList.add('open');
+}
+
+function closeLightbox() {
+  cancelOriginal();
+  lightbox.classList.remove('open');
+  lightboxTrack.innerHTML = '';
+  lightboxIndex = -1;
+  downHint.classList.remove('show');
+}
+
+function settleMove(delta) {
+  if (lightboxIndex < 0) return;
+  const next = lightboxIndex + delta;
+  if (next < 0 || next >= allPosts.length) {
+    setLightboxTrack(lightboxBaseX, true);
+    return;
+  }
+  const target = delta > 0 ? lightboxBaseX - window.innerWidth : lightboxBaseX + window.innerWidth;
+  setLightboxTrack(target, true);
+  setTimeout(() => {
+    renderLightboxAt(next);
+  }, 280);
+}
+
+grid.addEventListener('click', (event) => {
+  const tile = event.target.closest('.tile');
+  if (!tile) return;
+  openLightbox(Number(tile.dataset.index || '-1'));
+});
+lightbox.addEventListener('click', (event) => {
+  if (event.target === lightbox || event.target === lightboxCredit) closeLightbox();
+});
+document.addEventListener('keydown', (event) => {
+  if (!lightbox.classList.contains('open')) return;
+  if (event.key === 'Escape') closeLightbox();
+  if (event.key === 'ArrowDown' || event.key === 'ArrowRight') settleMove(1);
+  if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') settleMove(-1);
+});
+lightbox.addEventListener('touchstart', (event) => {
+  if (!lightbox.classList.contains('open')) return;
+  lightboxTouchActive = true;
+  lightboxTouchStartX = event.touches[0].clientX;
+  lightboxTouchStartY = event.touches[0].clientY;
+  lightboxBaseX = currentBase();
+  lightboxTrack.classList.remove('animating');
+}, { passive: true });
+lightbox.addEventListener('touchmove', (event) => {
+  if (!lightboxTouchActive) return;
+  const dx = event.touches[0].clientX - lightboxTouchStartX;
+  const dy = event.touches[0].clientY - lightboxTouchStartY;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    event.preventDefault();
+    setLightboxTrack(lightboxBaseX + dx, false);
+  }
+}, { passive: false });
+lightbox.addEventListener('touchend', (event) => {
+  if (!lightboxTouchActive) return;
+  lightboxTouchActive = false;
+  const dx = event.changedTouches[0].clientX - lightboxTouchStartX;
+  const dy = event.changedTouches[0].clientY - lightboxTouchStartY;
+  const threshold = window.innerWidth * 0.4;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx <= -threshold) {
+      settleMove(1);
+      return;
+    }
+    if (dx >= threshold) {
+      settleMove(-1);
+      return;
+    }
+    setLightboxTrack(lightboxBaseX, true);
+    return;
+  }
+  setLightboxTrack(lightboxBaseX, true);
+}, { passive: true });
+
+new IntersectionObserver((entries) => {
+  if (entries.some((entry) => entry.isIntersecting)) pump();
+}, { rootMargin: LOOKAHEAD_PX + 'px' }).observe(sentinel);
+
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+restoreGridPosition();
+pump();
+</script></div></body></html>`;
+}
 
 function renderSettingsPage(url) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body.settings-page{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.settings-page .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.settings-page .fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.settings-page .fr-nav-fallback[hidden]{display:none}.settings-page .settings-shell{max-width:920px;margin:72px auto 20px;display:grid;gap:14px}.settings-page .settings-card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}.input-with-autocomplete{position:relative}.autocomplete{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:#14141b;box-shadow:0 18px 48px rgba(0,0,0,.5);overflow:hidden}.autocomplete[hidden]{display:none}.autocomplete-list{display:grid;max-height:280px;overflow-y:auto}.autocomplete-option,.autocomplete-empty{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;width:100%;padding:10px 12px;border:0;border-top:1px solid rgba(255,255,255,.08);background:transparent;color:#fff;text-align:left;cursor:pointer;font:inherit}.autocomplete-option:first-child,.autocomplete-empty:first-child{border-top:0}.autocomplete-option.active,.autocomplete-option:hover,.autocomplete-option:focus-visible{background:rgba(255,255,255,.08);outline:none}.autocomplete-tag{overflow:hidden}.autocomplete-name{font-weight:600}.autocomplete-meta{font-size:.78rem;margin-top:2px;color:rgba(255,255,255,.6)}.autocomplete-empty{grid-template-columns:1fr;color:rgba(255,255,255,.6)}.autocomplete-category{width:10px;height:10px;border-radius:999px;background:#666}.autocomplete-category[data-category="0"]{background:#b9b9b9}.autocomplete-category[data-category="1"]{background:#e7c94e}.autocomplete-category[data-category="3"]{background:#53b45e}.autocomplete-category[data-category="4"]{background:#f28b51}.autocomplete-category[data-category="5"]{background:#5f9bff}.autocomplete-category[data-category="6"]{background:#b36df6}.autocomplete-count{font-size:.78rem;color:rgba(255,255,255,.6);white-space:nowrap}</style></head><body class="settings-page">${renderFloatingNav('settings')}<main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search and filters</h2><label>Tags/search query<div class="input-with-autocomplete"><input id="sharedTags" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="tagAutocompleteList" aria-autocomplete="list" placeholder="e.g. fox forest"/><div class="autocomplete" id="tagAutocomplete" hidden><div class="autocomplete-list" id="tagAutocompleteList" role="listbox"></div></div></div></label><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="settings-actions"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderFloatingNavScript()}</script><script>const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body.settings-page{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.settings-page .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.settings-page .fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.settings-page .fr-nav-fallback[hidden]{display:none}.settings-page .settings-shell{max-width:920px;margin:72px auto 20px;display:grid;gap:14px}.settings-page .settings-card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}.input-with-autocomplete{position:relative}.autocomplete{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:#14141b;box-shadow:0 18px 48px rgba(0,0,0,.5);overflow:hidden}.autocomplete[hidden]{display:none}.autocomplete-list{display:grid;max-height:280px;overflow-y:auto}.autocomplete-option,.autocomplete-empty{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;width:100%;padding:10px 12px;border:0;border-top:1px solid rgba(255,255,255,.08);background:transparent;color:#fff;text-align:left;cursor:pointer;font:inherit}.autocomplete-option:first-child,.autocomplete-empty:first-child{border-top:0}.autocomplete-option.active,.autocomplete-option:hover,.autocomplete-option:focus-visible{background:rgba(255,255,255,.08);outline:none}.autocomplete-tag{overflow:hidden}.autocomplete-name{font-weight:600}.autocomplete-meta{font-size:.78rem;margin-top:2px;color:rgba(255,255,255,.6)}.autocomplete-empty{grid-template-columns:1fr;color:rgba(255,255,255,.6)}.autocomplete-category{width:10px;height:10px;border-radius:999px;background:#666}.autocomplete-category[data-category="0"]{background:#b9b9b9}.autocomplete-category[data-category="1"]{background:#e7c94e}.autocomplete-category[data-category="3"]{background:#53b45e}.autocomplete-category[data-category="4"]{background:#f28b51}.autocomplete-category[data-category="5"]{background:#5f9bff}.autocomplete-category[data-category="6"]{background:#b36df6}.autocomplete-count{font-size:.78rem;color:rgba(255,255,255,.6);white-space:nowrap}</style></head><body class="settings-page">${renderFloatingNav('settings')}<main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search and filters</h2><label>Tags/search query<div class="input-with-autocomplete"><input id="sharedTags" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="tagAutocompleteList" aria-autocomplete="list" placeholder="e.g. fox forest"/><div class="autocomplete" id="tagAutocomplete" hidden><div class="autocomplete-list" id="tagAutocompleteList" role="listbox"></div></div></div></label><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="settings-actions"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderFloatingNavScript()}</script><script type="module">import { getBrowserClient, fetchTagSuggestions, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';const apiClient=getBrowserClient();const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
 const tagsInput=q('sharedTags');
 const tagAutocomplete=q('tagAutocomplete');
 const tagAutocompleteList=q('tagAutocompleteList');
-const CLIENT_E621_TAG_AUTOCOMPLETE_API='https://e621.net/tags/autocomplete.json';
-const TAG_AUTOCOMPLETE_LIMIT=8;
 const AUTOCOMPLETE_DEBOUNCE_MS=160;
-const tagAutocompleteState={items:[],activeIndex:-1,open:false,requestId:0,debounceTimer:null};
-function sanitizeAutocompleteQuery(value){return String(value||'').trim().toLowerCase().replace(/\\s+/g,'_').replace(/[^a-z0-9_:()'-]/g,'').slice(0,64)}
+const tagAutocompleteState={items:[],activeIndex:-1,open:false,requestId:0,debounceTimer:null,abort:null};
 function getActiveTagToken(value){const normalized=String(value||'');if(/\\s$/.test(normalized))return '';const parts=normalized.split(/\\s+/);return sanitizeAutocompleteQuery(parts[parts.length-1]||'')}
 function replaceActiveTagToken(value,tagName){const normalized=String(value||'');const parts=normalized.split(/\\s+/).filter((part,index,array)=>part||index<array.length-1);if(!parts.length||/\\s$/.test(normalized)){return (normalized.trim()?normalized.trim()+' ':'')+tagName+' '}parts[parts.length-1]=tagName;return parts.join(' ')+' '}
 function categoryLabel(category){const labels={0:'General',1:'Artist',3:'Copyright',4:'Character',5:'Species',6:'Invalid'};return labels[category]||'Tag'}
 function formatPostCount(count){return Number(count||0).toLocaleString()}
 function scheduleTagAutocomplete(runImmediately){if(tagAutocompleteState.debounceTimer){clearTimeout(tagAutocompleteState.debounceTimer);tagAutocompleteState.debounceTimer=null}if(runImmediately){updateTagAutocomplete();return}tagAutocompleteState.debounceTimer=setTimeout(updateTagAutocomplete,AUTOCOMPLETE_DEBOUNCE_MS)}
-async function updateTagAutocomplete(){const token=getActiveTagToken(tagsInput.value);if(!token){closeTagAutocomplete();return}const requestId=++tagAutocompleteState.requestId;try{const items=await fetchTagAutocomplete(token);if(requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=items;tagAutocompleteState.activeIndex=items.length?0:-1;renderTagAutocomplete()}catch(error){if(requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=[];tagAutocompleteState.activeIndex=-1;renderTagAutocomplete('Could not load tag suggestions right now.')}}
-async function fetchTagAutocomplete(token){const upstreamUrl=new URL(CLIENT_E621_TAG_AUTOCOMPLETE_API);upstreamUrl.searchParams.set('search[name_matches]',token+'*');const response=await fetch(upstreamUrl.toString(),{headers:{Accept:'application/json'}});const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error('autocomplete request failed');return Array.isArray(payload)?payload.filter((tag)=>tag&&typeof tag.name==='string').slice(0,TAG_AUTOCOMPLETE_LIMIT).map((tag)=>({id:tag.id||null,name:tag.name,category:Number.isFinite(tag.category)?tag.category:null,postCount:Number.isFinite(tag.post_count)?tag.post_count:0,antecedentName:tag.antecedent_name||null})):[]}
+async function updateTagAutocomplete(){const token=getActiveTagToken(tagsInput.value);if(!token){closeTagAutocomplete();return}const requestId=++tagAutocompleteState.requestId;if(tagAutocompleteState.abort)tagAutocompleteState.abort.abort();const controller=new AbortController();tagAutocompleteState.abort=controller;try{const items=await fetchTagSuggestions(apiClient,token,{signal:controller.signal});if(requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=items;tagAutocompleteState.activeIndex=items.length?0:-1;renderTagAutocomplete()}catch(error){if(isAbortError(error)||requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=[];tagAutocompleteState.activeIndex=-1;renderTagAutocomplete('Could not load tag suggestions right now.')}}
 function renderTagAutocomplete(emptyMessage){tagAutocompleteList.innerHTML='';const hasItems=tagAutocompleteState.items.length>0;if(!hasItems){if(!emptyMessage){closeTagAutocomplete();return}const empty=document.createElement('div');empty.className='autocomplete-empty';empty.textContent=emptyMessage;tagAutocompleteList.appendChild(empty)}else{tagAutocompleteState.items.forEach((item,index)=>{const button=document.createElement('button');button.type='button';button.className='autocomplete-option'+(index===tagAutocompleteState.activeIndex?' active':'');button.setAttribute('data-tag-name',item.name);button.setAttribute('role','option');button.setAttribute('aria-selected',index===tagAutocompleteState.activeIndex?'true':'false');const category=document.createElement('span');category.className='autocomplete-category';if(item.category!==null&&item.category!==undefined)category.setAttribute('data-category',String(item.category));const tag=document.createElement('span');tag.className='autocomplete-tag';const name=document.createElement('div');name.className='autocomplete-name';name.textContent=item.name.replaceAll('_',' ');const meta=document.createElement('div');meta.className='autocomplete-meta';meta.textContent=item.antecedentName?'Alias of '+item.antecedentName.replaceAll('_',' '):categoryLabel(item.category);tag.appendChild(name);tag.appendChild(meta);const count=document.createElement('span');count.className='autocomplete-count';count.textContent=formatPostCount(item.postCount);button.appendChild(category);button.appendChild(tag);button.appendChild(count);tagAutocompleteList.appendChild(button)})}tagAutocompleteState.open=true;tagAutocomplete.hidden=false;tagsInput.setAttribute('aria-expanded','true')}
 function closeTagAutocomplete(){tagAutocompleteState.items=[];tagAutocompleteState.activeIndex=-1;tagAutocompleteState.open=false;tagAutocomplete.hidden=true;tagsInput.setAttribute('aria-expanded','false');tagAutocompleteList.innerHTML=''}
 function applyAutocompleteTag(tagName){tagsInput.value=replaceActiveTagToken(tagsInput.value,tagName);tagsInput.focus();closeTagAutocomplete()}
@@ -2167,7 +2522,7 @@ function renderAboutPage() {
 const PRIVACY_CONTACT_EMAIL = 'owo_pounces_on@proton.me';
 
 function renderPrivacyPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:24px}p,li{line-height:1.55}a{color:#ff73af}code{font-family:ui-monospace,Menlo,Consolas,monospace}body.page-transitioning{opacity:0;transition:opacity .22s ease}.updated{opacity:.8;font-size:.92rem}</style></head><body>${renderFloatingNav('privacy')}<div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-05-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker serves app shell assets (HTML/CSS/JS) and does not proxy those content API requests in normal operation.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy. For media and API requests, your browser sends e621 only this site's origin as the referrer (for example <code>https://furryreel.com/</code>), not the page path or your search tags, because e621's media servers refuse requests that carry no referrer at all.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:24px}p,li{line-height:1.55}a{color:#ff73af}code{font-family:ui-monospace,Menlo,Consolas,monospace}body.page-transitioning{opacity:0;transition:opacity .22s ease}.updated{opacity:.8;font-size:.92rem}</style></head><body>${renderFloatingNav('privacy')}<div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-10-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker serves app shell assets (HTML/CSS/JS) and does not proxy those content API requests in normal operation.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy. For media and API requests, your browser sends e621 only this site's origin as the referrer (for example <code>https://furryreel.com/</code>), not the page path or your search tags, because e621's media servers refuse requests that carry no referrer at all.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><p>To avoid asking e621 for the same content twice, recently loaded e621 results and tag suggestions are kept in your browser's session storage for the current tab (cleared when the tab closes, and not used after one hour). Your settings, and a request-timing value that lets open tabs share e621's rate limit, are kept in your browser's local storage. None of this is sent to the site operator.</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
 }
 
 function renderFloatingNav(activePage) {
