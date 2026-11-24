@@ -487,6 +487,11 @@ export function sanitizeAutocompleteQuery(value) {
     .slice(0, 64);
 }
 
+function postTagNames(tags) {
+  const names = Array.isArray(tags) ? tags : Object.values(tags || {}).flat();
+  return [...new Set(names.filter(tag => typeof tag === 'string' && tag.length && !/\s/.test(tag)))];
+}
+
 function artistsOf(post) {
   return post.tags && Array.isArray(post.tags.artist) ? post.tags.artist.filter(Boolean) : [];
 }
@@ -514,6 +519,7 @@ export function mapPhotoPost(rawPost) {
     sampleWidth: (sampleUrl && post.sample.width) || 0,
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
     artistText: artists.join(', '),
+    postTags: postTagNames(post.tags),
     artistTags: Array.isArray(post.tags) ? post.tags : [],
   };
 }
@@ -539,6 +545,7 @@ export function mapReelPost(rawPost) {
     previewUrl: (post.preview && post.preview.url) || (post.sample && post.sample.url) || post.file.url,
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
     artistText: artist.join(', '),
+    postTags: postTagNames(post.tags),
     artistTags: Array.isArray(post.tags) ? post.tags : [],
     description: [
       artist.length ? 'Artist: ' + artist.join(', ') : 'Artist unknown',
@@ -617,7 +624,7 @@ export function fetchPostsPage(client, { view, tags, page, limit, signal, onStat
   const url = buildPostsUrl({ tags, page, limit });
   return client.getJson(url, {
     label: view + ':page-' + page,
-    cacheKey: 'post-v2|' + view + '|' + url,
+    cacheKey: 'post-v3|' + view + '|' + url,
     ttlMs: POSTS_TTL_MS,
     staleTtlMs: POSTS_STALE_TTL_MS,
     validate: hasPostsArray,
@@ -632,7 +639,23 @@ export function fetchPostsPage(client, { view, tags, page, limit, signal, onStat
 }
 
 export function peekPostsPage(client, { view, tags, page, limit }) {
-  return client.peek('post-v2|' + view + '|' + buildPostsUrl({ tags, page, limit }));
+  return client.peek('post-v3|' + view + '|' + buildPostsUrl({ tags, page, limit }));
+}
+
+export async function fetchPostCount(client, tags, { signal } = {}) {
+  const url = new URL('/posts/count.json', E621_ORIGIN);
+  url.searchParams.set('tags', tags);
+  url.searchParams.set('_client', CLIENT_NAME);
+  const { data } = await client.getJson(url.toString(), {
+    label: 'more-like-this-count',
+    ttlMs: 90_000,
+    timeoutMs: 5000,
+    maxAttempts: 1,
+    validate: payload => Number.isSafeInteger(payload?.count) && payload.count >= 0
+      && typeof payload.capped === 'boolean',
+    signal,
+  });
+  return data;
 }
 
 export async function fetchTagSuggestions(client, rawQuery, { signal } = {}) {

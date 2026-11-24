@@ -6,6 +6,7 @@ import {
   createRateLimiter,
   createResponseCache,
   fetchPostsPage,
+  fetchPostCount,
   fetchPostArtists,
   fetchTagSuggestions,
   mapPhotoPost,
@@ -39,6 +40,27 @@ test('post pages accept the current e621 array and nested media fields', async (
   assert.deepEqual(photos.data.posts.map(({ id, fileUrl, sampleUrl, sampleWidth }) => ({ id, fileUrl, sampleUrl, sampleWidth })), [
     { id: 2, fileUrl: original.url, sampleUrl: sample.jpg, sampleWidth: 480 },
   ]);
+});
+
+test('mapped posts keep every distinct available tag across API formats', () => {
+  const grouped = e621Post(1, { file: { ext: 'webm', url: 'https://static1.e621.net/reel.webm' } });
+  grouped.tags = { general: Array.from({ length: 30 }, (_, i) => 'tag_' + i), artist: ['creator'], species: ['fox'] };
+  assert.deepEqual(mapReelPost(grouped).postTags, [...grouped.tags.general, 'creator', 'fox']);
+  const flat = {
+    id: 2,
+    files: { meta: { ext: 'jpg' }, original: { url: 'https://static1.e621.net/photo.jpg' } },
+    tags: ['fox', 'fox', 'artist_name'],
+  };
+  assert.deepEqual(mapPhotoPost(flat).postTags, ['fox', 'artist_name']);
+});
+
+test('count lookup uses the full feed query and preserves capped results', async () => {
+  const { client, calls } = scriptedClient({ responses: [jsonResponse({ count: 1000, capped: true })] });
+  const tags = 'order:score animated fox forest rating:s ratio:<1';
+  assert.deepEqual(await fetchPostCount(client, tags), { count: 1000, capped: true });
+  const url = new URL(calls[0]);
+  assert.equal(url.pathname, '/posts/count.json');
+  assert.equal(url.searchParams.get('tags'), tags);
 });
 
 test('artist credits resolve exact flat tags and reuse grouped credits', async () => {

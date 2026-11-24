@@ -734,6 +734,7 @@ function renderApp(url) {
             <details id="reelDetails" hidden>
               <summary class="feed-control">Post details</summary>
               <div class="meta" id="metaBlock"><div class="credit" id="postDescription"></div></div>
+              ${renderMoreLikeThisButton()}
             </details>
             <div class="side-actions reel-controls">
               <button type="button" class="feed-control" id="togglePlayback" disabled>Pause</button>
@@ -760,6 +761,7 @@ function renderApp(url) {
     </div>
 
     ${renderFeedFilters()}
+    ${renderMoreLikeThisDialog()}
     <noscript>
       <section style="padding:24px;max-width:960px;margin:0 auto;color:#f6f6f6">
         <h2>Browse FurryReel without JavaScript</h2>
@@ -774,6 +776,7 @@ function renderApp(url) {
 
       import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
       import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
+      import { bindMoreLikeThis } from '${clientAssetUrl('more-like-this.js')}';
 
       const apiClient = getBrowserClient();
       const REEL_PAGE_SIZE = 24;
@@ -881,14 +884,31 @@ function renderApp(url) {
           state.filtersOpen = open;
           syncPlayback();
         },
-        onApply({ tags, sort, rating, ratio }) {
+        onApply({ tags, sort, rating, ratio }, { pages } = {}) {
           Object.assign(state, { tags, mode: sort, rating, ratio });
           modeSelect.value = sort;
           tagsInput.value = tags;
           ratingSelect.value = rating;
           ratioSelect.value = ratio;
           syncDisplaySettings();
-          restartFeed();
+          restartFeed(pages);
+          if (pages) document.getElementById('openFeedFilters').focus({ preventScroll: true });
+        },
+      });
+      bindMoreLikeThis({
+        client: apiClient,
+        view: 'reels',
+        pageSize: REEL_PAGE_SIZE,
+        buildTags: buildApiTags,
+        filters: feedFilters,
+        getPost: () => state.posts[state.currentIndex],
+        onOpen() {
+          state.filtersOpen = true;
+          syncPlayback();
+        },
+        onClose() {
+          state.filtersOpen = false;
+          syncPlayback();
         },
       });
       emptyReelFilters.addEventListener('click', () => feedFilters.open(emptyReelFilters));
@@ -1554,8 +1574,11 @@ function renderApp(url) {
         return Number(count || 0).toLocaleString();
       }
 
-      async function restartFeed() {
+      async function restartFeed(pages) {
         state.feedGeneration += 1;
+        state.feedAbort?.abort();
+        state.feedAbort = null;
+        state.loading = false;
         state.navigationToken += 1;
         state.animationLock = false;
         state.incomingVideo = null;
@@ -1579,7 +1602,12 @@ function renderApp(url) {
         reelTrack.innerHTML = '';
         reelTrack.style.transform = 'translate3d(0, 0, 0)';
         renderStatus('Loading feed…', 'Pulling fresh posts from e621.');
-        await loadPosts(true);
+        if (pages?.length) {
+          for (const { data } of pages) appendPosts(data);
+          await showPost(0, { immediate: true });
+        } else {
+          await loadPosts(true);
+        }
         if (generation === state.feedGeneration && state.posts.length) maybePreloadPage();
       }
 
@@ -1597,6 +1625,17 @@ function renderApp(url) {
         if (state.posts.length - state.currentIndex <= PAGE_LOOKAHEAD) loadMore();
       }
 
+      function appendPosts(data) {
+        state.lastFeedSource = 'client-direct';
+        for (const post of data.posts) {
+          if (state.postIds.has(post.id)) continue;
+          state.postIds.add(post.id);
+          state.posts.push(post);
+        }
+        state.endOfFeed = data.rawCount < REEL_PAGE_SIZE;
+        state.nextPage += 1;
+      }
+
       // A restart (replace) supersedes any in-flight page: the old request is aborted and its late result
       // dropped, instead of the new filters being silently ignored while the old request finishes.
       async function loadPosts(replace = false) {
@@ -1611,17 +1650,9 @@ function renderApp(url) {
           ? setTimeout(() => renderStatus('Taking longer than usual', 'e621 is responding slowly. Still trying…'), SLOW_FEED_MS)
           : null;
         try {
-          const params = new URLSearchParams({
-            mode: state.mode,
-            page: String(state.nextPage),
-          });
-          if (state.tags) params.set('tags', state.tags);
-          if (state.rating) params.set('rating', state.rating);
-          if (state.ratio) params.set('ratio', state.ratio);
-
           const { data } = await fetchPostsPage(apiClient, {
             view: 'reels',
-            tags: buildApiTags(params),
+            tags: buildApiTags({ tags: state.tags, sort: state.mode, rating: state.rating, ratio: state.ratio }),
             page: state.nextPage,
             limit: REEL_PAGE_SIZE,
             signal: controller.signal,
@@ -1631,14 +1662,7 @@ function renderApp(url) {
             },
           });
           if (generation !== state.feedGeneration) return;
-          state.lastFeedSource = 'client-direct';
-          for (const post of data.posts) {
-            if (state.postIds.has(post.id)) continue;
-            state.postIds.add(post.id);
-            state.posts.push(post);
-          }
-          state.endOfFeed = data.rawCount < REEL_PAGE_SIZE;
-          state.nextPage += 1;
+          appendPosts(data);
 
           if (!state.posts.length) {
             renderEmpty('No posts found', 'Try different tags or remove a filter.', { editFilters: true });
@@ -1669,33 +1693,14 @@ function renderApp(url) {
         }
       }
 
-      function buildApiTags(params) {
-        const tags = [
-          params.get('mode') === 'score' ? 'order:score' : 'order:rank',
-          'animated',
-          ...sanitizeClientTags(params.get('tags') || ''),
-        ];
-        const rating = sanitizeClientRating(params.get('rating'));
-        const ratio = sanitizeRatioFilter(params.get('ratio'));
-        if (rating) tags.push('rating:' + rating);
-        if (ratio) tags.push(ratio === 'vertical' ? 'ratio:<1' : 'ratio:>1');
+      function buildApiTags({ tags: query, sort, rating, ratio }) {
+        const tags = [sort === 'score' ? 'order:score' : 'order:rank', 'animated'];
+        const selected = String(query || '').trim();
+        if (selected) tags.push(selected);
+        if (['s', 'q', 'e'].includes(rating)) tags.push('rating:' + rating);
+        if (ratio === 'vertical') tags.push('ratio:<1');
+        if (ratio === 'landscape') tags.push('ratio:>1');
         return tags.join(' ');
-      }
-
-      function sanitizeClientTags(raw) {
-        return String(raw || '')
-          .split(/\\s+/)
-          .map((tag) => tag.trim())
-          .filter(Boolean)
-          .slice(0, 12);
-      }
-
-      function sanitizeClientRating(value) {
-        return ['s', 'q', 'e'].includes(value) ? value : '';
-      }
-
-      function sanitizeRatioFilter(value) {
-        return ['vertical', 'landscape'].includes(value) ? value : '';
       }
 
       function renderStatus(title, body, { retry = false, editFilters = false } = {}) {
@@ -2228,6 +2233,12 @@ function renderFeedFilterStyles() {
     .feed-filter-sheet label{display:grid;gap:5px;font-size:.88rem}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid #ffffff42;border-radius:10px;background:#0b0b10;color:#fff;padding:8px;font:inherit;font-size:1rem}
     .feed-filter-sheet label[for=feedTags]{margin-bottom:-8px}
     .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:#ff70aa;color:#170811;border-color:transparent}.feed-filter-sheet p{margin:0;color:#c4c2cb;font-size:.8rem}
+    .more-like-trigger{margin:0 10px 10px}.lightbox .more-like-trigger{margin:0 0 0 10px;pointer-events:auto}
+    .more-like-list{max-height:min(40dvh,20rem);min-width:0;overflow:auto;overscroll-behavior:contain;margin:0;padding:4px 8px;border:1px solid #ffffff30;border-radius:10px}
+    .more-like-list legend{padding:0 5px;font-size:.85rem}.more-like-list label{display:flex;align-items:center;gap:9px;min-height:44px;overflow-wrap:anywhere;cursor:pointer}
+    .more-like-list label:has(input:checked){color:#ffd0e4;background:#302030;border-radius:8px}.more-like-list small{margin-left:auto;color:#c4c2cb}
+    .more-like-list input[type=radio]{width:18px;min-height:0;height:18px;flex:none;accent-color:#ff70aa}
+    .more-like-sheet [data-more-feedback]{min-height:2.5em}.more-like-sheet button:disabled{opacity:.5;cursor:default}
     .media-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;padding:14px;border-radius:14px;background:#15151ef2;color:#fff;text-align:center;min-width:175px}.media-error p{margin:0 0 8px}.media-error[hidden]{display:none}
   `;
 }
@@ -2244,6 +2255,22 @@ function renderFeedFilters() {
         <div class="feed-filter-actions"><button type="reset" class="feed-control">Clear filters</button><button type="submit" class="feed-control feed-filter-submit">Apply filters</button></div>
       </form>
     </dialog>`;
+}
+
+function renderMoreLikeThisButton() {
+  return '<button type="button" class="feed-control more-like-trigger" id="openMoreLikeThis" aria-haspopup="dialog">More like this</button>';
+}
+
+function renderMoreLikeThisDialog() {
+  return `<dialog class="feed-filter-sheet more-like-sheet" id="moreLikeThis" aria-labelledby="moreLikeTitle">
+    <form>
+      <header><h2 id="moreLikeTitle">More like this</h2><button type="button" class="feed-control" data-more-close>Close</button></header>
+      <label>Find a tag<input type="search" autocomplete="off"/></label>
+      <fieldset class="more-like-list" data-more-tags aria-label="Post tags"></fieldset>
+      <p role="status" data-more-feedback></p>
+      <button type="submit" class="feed-control feed-filter-submit" data-more-add disabled>Add tag</button>
+    </form>
+  </dialog>`;
 }
 
 function renderPhotoGridPage(url) {
@@ -2271,13 +2298,15 @@ function renderPhotoGridPage(url) {
     <button type="button" class="feed-control lightbox-nav lightbox-prev" id="previousPhoto" aria-label="Previous photo">‹</button>
     <button type="button" class="feed-control lightbox-nav lightbox-next" id="nextPhoto" aria-label="Next photo">›</button>
     <div class="down-hint" id="downHint" aria-hidden="true">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div>
-    <div class="credit" id="lightboxCredit"></div>
+    <div class="credit"><span id="lightboxCredit"></span>${renderMoreLikeThisButton()}</div>
   </dialog>
+  ${renderMoreLikeThisDialog()}
   <script>${renderFloatingNavScript()}</script><script type="module">
 import { getBrowserClient, describeApiError } from '${clientAssetUrl('e621-client.js')}';
-import { createPhotoFeed, photoTagsFromSettings } from '${clientAssetUrl('photo-feed.js')}';
+import { createPhotoFeed, photoTagsFromSettings, PHOTO_PAGE_SIZE } from '${clientAssetUrl('photo-feed.js')}';
 import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
 import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
+import { bindMoreLikeThis } from '${clientAssetUrl('more-like-this.js')}';
 
 const grid = document.getElementById('grid');
 const status = document.getElementById('status');
@@ -2344,9 +2373,9 @@ let feed = makeFeed();
 const sentinel = document.createElement('div');
 grid.after(sentinel);
 
-function makeFeed() {
+function makeFeed(pages) {
   const signal = feedAbort.signal;
-  return createPhotoFeed({ client, tags, signal, onChange: () => {
+  return createPhotoFeed({ client, tags, signal, initialPages: pages, onChange: () => {
     if (!signal.aborted) renderStatus();
   } });
 }
@@ -2354,11 +2383,11 @@ function makeFeed() {
 const feedFilters = bindFeedFilters({
   initial: initialFilters,
   loadSettings,
-  onApply(filters) {
+  onApply(filters, { pages } = {}) {
     tags = photoTagsFromSettings(filters);
     feedAbort.abort();
     feedAbort = new AbortController();
-    feed = makeFeed();
+    feed = makeFeed(pages);
     allPosts.length = 0;
     grid.replaceChildren();
     if (saveTimer) clearTimeout(saveTimer);
@@ -2367,7 +2396,17 @@ const feedFilters = bindFeedFilters({
     saveGridPosition();
     renderStatus();
     pump();
+    if (pages) document.getElementById('openFeedFilters').focus({ preventScroll: true });
   },
+});
+bindMoreLikeThis({
+  client,
+  view: 'photos',
+  pageSize: PHOTO_PAGE_SIZE,
+  buildTags: photoTagsFromSettings,
+  filters: feedFilters,
+  getPost: () => allPosts[lightboxIndex],
+  onSuccess: () => lightbox.close(),
 });
 emptyPhotoFilters.addEventListener('click', () => feedFilters.open(emptyPhotoFilters));
 

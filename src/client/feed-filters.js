@@ -30,7 +30,7 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     }, { once: true });
   }
 
-  function apply(next) {
+  function apply(next, options) {
     if (!Object.keys(next).some(key => next[key] !== filters[key])) return;
     filters = { ...filters, ...next };
     const settings = loadSettings();
@@ -47,7 +47,7 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     }
     history.replaceState(history.state, '', url);
     updateTrigger();
-    onApply(filters);
+    onApply(filters, options);
   }
 
   trigger.addEventListener('click', () => open());
@@ -66,5 +66,5 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     fields.ratio.value = '';
   });
   updateTrigger();
-  return { open };
+  return { open, apply, get current() { return { ...filters }; } };
 }

@@ -344,3 +344,9 @@ When making changes in this repository, append entries to this file so the next 
 - Keep the current and adjacent slides mounted. Give the active reel priority and warm the next likely reel once the active frame is ready. Leave speculative media loading off on Save-Data and 2G connections.
 - Start an incoming video muted while a committed snap is moving. Keep its playback position on arrival and restore the viewer's mute preference only once it is active. Keep paused and reduced-motion navigation free of preview playback.
 - Reuse an in-flight page request at the feed boundary, deduplicate posts, and stop prefetching after the final page.
+
+## 2026-11-24 — Add More like this to Reels and Photos
+
+- Show all of a post's reported tags in a scrollable picker. Preview the selected tag combined with the current feed query through e621's rate-limited /posts/count.json endpoint.
+- Validate up to three result pages before saving a new tag. An empty or failed search keeps the current feed and filters. A valid search seeds the refreshed feed with the checked pages.
+- Verify tag mapping and capped count handling, and exercise repeated additions and rollback in both browser viewers.

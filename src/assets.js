@@ -8,10 +8,13 @@ import postCreditSource from './client/post-credit.js';
 
 import tagAutocompleteSource from './client/tag-autocomplete.js';
 
+import moreLikeThisSource from './client/more-like-this.js';
+
 const CLIENT_FILES = {
   'e621-client.js': e621ClientSource,
   'photo-feed.js': photoFeedSource,
   'feed-filters.js': feedFiltersSource,
+  'more-like-this.js': moreLikeThisSource,
   'tag-autocomplete.js': tagAutocompleteSource,
   'post-credit.js': postCreditSource,
 };

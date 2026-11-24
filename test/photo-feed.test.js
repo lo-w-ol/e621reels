@@ -19,6 +19,24 @@ test('only one page request is in flight at a time', async () => {
   assert.equal(feed.queue.length, PAGE);
 });
 
+test('validated pages seed the grid without requesting them again', async () => {
+  const { client, calls } = scriptedClient({ responses: [page(20, 1)] });
+  const feed = createPhotoFeed({
+    client,
+    tags: 'fox forest',
+    pageSize: PAGE,
+    initialPages: [
+      { source: 'network', data: { rawCount: PAGE, posts: [] } },
+      { source: 'network', data: { rawCount: PAGE, posts: [{ id: 10 }] } },
+    ],
+  });
+  assert.deepEqual(feed.take(PAGE), [{ id: 10 }]);
+  assert.equal(feed.pagesLoaded, 2);
+  assert.equal(calls.length, 0);
+  await feed.loadNextPage();
+  assert.equal(new URL(calls[0]).searchParams.get('page'), '3');
+});
+
 test('an empty result ends the feed instead of paging forever', async () => {
   const { client, calls } = scriptedClient({ responses: [jsonResponse({ posts: [] })] });
   const feed = createPhotoFeed({ client, tags: 'no_such_tag', pageSize: PAGE });

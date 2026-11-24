@@ -25,6 +25,7 @@ export function createPhotoFeed({
   client,
   tags,
   signal,
+  initialPages = [],
   pageSize = PHOTO_PAGE_SIZE,
   maxEmptyPages = MAX_EMPTY_PAGES,
   slowAfterMs = SLOW_AFTER_MS,
@@ -159,6 +160,8 @@ export function createPhotoFeed({
     }
     return restored;
   }
+
+  initialPages.forEach((result, index) => accept(result, index + 1));
 
   return {
     state,
