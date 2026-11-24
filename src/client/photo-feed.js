@@ -24,6 +24,7 @@ export function photoTagsFromSettings(shared) {
 export function createPhotoFeed({
   client,
   tags,
+  signal,
   pageSize = PHOTO_PAGE_SIZE,
   maxEmptyPages = MAX_EMPTY_PAGES,
   slowAfterMs = SLOW_AFTER_MS,
@@ -112,7 +113,7 @@ export function createPhotoFeed({
       state.slow = true;
       notify();
     }, slowAfterMs);
-    current = fetchPostsPage(client, { view: 'photos', tags, page, limit: pageSize, onStatus })
+    current = fetchPostsPage(client, { view: 'photos', tags, page, limit: pageSize, onStatus, signal })
       .then(
         (result) => accept(result, page),
         (error) => {

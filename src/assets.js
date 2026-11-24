@@ -2,10 +2,12 @@
 // URLs carry a content hash, so browsers can cache them forever and a deploy picks up new code at once.
 import e621ClientSource from './client/e621-client.js';
 import photoFeedSource from './client/photo-feed.js';
+import feedFiltersSource from './client/feed-filters.js';
 
 const CLIENT_FILES = {
   'e621-client.js': e621ClientSource,
   'photo-feed.js': photoFeedSource,
+  'feed-filters.js': feedFiltersSource,
 };
 
 // FNV-1a; only needs to change whenever any client file changes.

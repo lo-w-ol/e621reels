@@ -327,3 +327,9 @@ When making changes in this repository, append entries to this file so the next 
 - Confirmed that live `/posts.json` returns a top-level array with media in `files` and scores in `stats.score`.
 - Updated the shared browser client to accept both response formats and preserve raw page counts for pagination. The current response supplies flat tags, so the UI uses its existing unknown-artist label when artist categories are unavailable.
 - Added a regression test for the current image and video layouts, including a post without a public media URL.
+
+## 2026-11-24 — Improve Reels and Photos viewer controls
+
+- Added a shared feed filter dialog for tags, rating, sort, and ratio. Applying a changed filter restarts the active feed in place, empty states link to the dialog, and URL sharing follows the existing setting.
+- Added tap and keyboard playback, saved mute preference, interaction-triggered progress, and per-reel recovery. Opening post details or filters and dragging to seek suspend playback.
+- Made the photo grid keyboard-operable and the lightbox modal, with explicit navigation, scrollable tall images, per-photo recovery, and focus restoration on close. Both viewers honor reduced motion during navigation.

@@ -375,6 +375,18 @@ function renderApp(url) {
       .privacy-note{margin:8px 0 0;color:var(--muted);font-size:.78rem;}
       .privacy-note a{color:#fff}.ux-chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ux-chip{border:1px solid var(--outline);background:rgba(8,8,12,.5);color:var(--text);border-radius:999px;padding:8px 12px;font-size:.78rem;min-height:40px}.ux-chip.selected{background:var(--accent-soft);border-color:rgba(255,47,120,.5)}.ux-notice{margin-top:10px;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:rgba(8,8,12,.45);font-size:.8rem;line-height:1.4}.ux-notice[hidden]{display:none}.onboarding{position:absolute;inset:auto 12px calc(var(--safe-bottom) + 72px);z-index:20;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:12px;backdrop-filter:blur(14px)}.onboarding[hidden]{display:none}.onboarding h3{margin:0 0 6px;font-size:.95rem}.onboarding p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.onboarding-actions{display:flex;justify-content:flex-end;margin-top:10px}.feed-status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;width:min(86%,340px);text-align:center;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:14px;backdrop-filter:blur(14px)}.feed-status[hidden],.feed-status button[hidden]{display:none}.feed-status strong{display:block;margin-bottom:6px;font-size:.95rem}.feed-status p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.feed-status button{margin-top:10px}.focus-ring:focus-visible,.action-button:focus-visible,.global-menu-toggle:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
       .credit a { color: #fff; }
+      ${renderFeedFilterStyles()}
+      .reel-progress{position:absolute;bottom:var(--safe-bottom);left:16px;right:16px;height:3px;z-index:3;border-radius:3px;background:#ffffff40;opacity:0;pointer-events:none}
+      .reel-progress.show{opacity:1}.reel-progress div{height:100%;width:0;background:#ff70aa;border-radius:3px}
+      #reelDetails{position:relative;max-width:min(66vw,380px);color:#fff}#reelDetails[open]{background:#14141ef2;border-radius:12px}
+      #reelDetails summary{display:list-item;box-sizing:border-box;padding:11px;min-height:44px}
+      #reelDetails .credit{border:0;background:none;border-radius:0;padding:4px 11px 12px;overflow-wrap:anywhere}
+      .overlay > .bottom{grid-row:2;pointer-events:none}.bottom > :is(details,.reel-controls){pointer-events:auto}
+      .reel-controls{margin-inline-start:auto;align-self:end}.reel-controls button{min-width:44px;min-height:44px}.reel-controls button:disabled{opacity:.5;cursor:default}
+      .reel-slide.failed .reel-media-fallback{opacity:.6}
+      .reel-slide.failed .load-indicator,.reel-slide.failed .reel-media,.reel-slide.loading .reel-media{visibility:hidden}
+      @media(prefers-reduced-motion:reduce){.reel-track.animating,.scrub-hud,.reel-progress{transition:none}.load-indicator-dot{animation:none}}
+
       .scrub-hud {
         position: absolute;
         left: 50%;
@@ -718,21 +730,23 @@ function renderApp(url) {
         </div>
         <section class="overlay">
           <div class="bottom">
-            <div class="meta" id="metaBlock">
-              <div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div>
-            </div>
-            <p class="privacy-note" id="privacyUrlNotice">Filters may appear in your URL/history. <a href="/privacy" data-page-nav>Privacy</a>.</p>
-            <div class="side-actions">
+            <details id="reelDetails" hidden>
+              <summary class="feed-control">Post details</summary>
+              <div class="meta" id="metaBlock"><div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div></div>
+            </details>
+            <div class="side-actions reel-controls">
+              <button type="button" class="feed-control" id="togglePlayback" disabled>Pause</button>
               <button class="action-button focus-ring" id="toggleMuteButton" type="button" aria-label="Unmute video audio">🔇</button>
             </div>
           </div>
         </section>
-        <div class="feed-status" id="feedStatus" role="status" aria-live="polite" hidden><strong id="feedStatusTitle"></strong><p id="feedStatusText"></p><button class="ux-chip focus-ring" id="feedRetryButton" type="button" hidden>Try again</button></div>
-        <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up/down for next reel, drag sideways on video to scrub, tap mute, and use the menu to switch pages.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
+        <div class="reel-progress" id="reelProgress" aria-hidden="true"><div id="progressBar"></div></div>
+        <div class="feed-status" id="feedStatus" role="status" aria-live="polite" hidden><strong id="feedStatusTitle"></strong><p id="feedStatusText"></p><button class="ux-chip focus-ring" id="feedRetryButton" type="button" hidden>Try again</button> <button class="ux-chip focus-ring" id="emptyReelFilters" type="button" hidden>Edit filters</button></div>
+        <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up or down to browse, tap to pause, or drag sideways on a video to scrub. On a keyboard, use Space to play or pause and Shift + Left or Right to seek.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
         <div hidden aria-hidden="true">
           <div id="statusCard"><strong id="statusTitle"></strong><p id="statusText"></p></div>
           <div id="postTitle"></div><div id="tagList"></div><div id="sortBadge"></div><div id="ratioBadge"></div><div id="counterBadge"></div>
-          <div id="progressBar"></div><button id="nextButton" type="button"></button><button id="previousButton" type="button"></button>
+          <button id="nextButton" type="button"></button><button id="previousButton" type="button"></button>
           <select id="modeSelect"><option value="trending">trending</option><option value="score">score</option></select>
           <input id="tagsInput" /><select id="ratingSelect"><option value=""></option><option value="s">s</option><option value="q">q</option><option value="e">e</option></select>
           <form id="filterPanel"></form><button id="toggleFiltersButton" type="button"></button><button id="resetButton" type="button"></button>
@@ -744,6 +758,7 @@ function renderApp(url) {
       </main>
     </div>
 
+    ${renderFeedFilters()}
     <noscript>
       <section style="padding:24px;max-width:960px;margin:0 auto;color:#f6f6f6">
         <h2>Browse FurryReel without JavaScript</h2>
@@ -755,6 +770,8 @@ function renderApp(url) {
     <script>${renderFloatingNavScript()}</script>
     <script type="module">
       import { getBrowserClient, fetchPostsPage, fetchTagSuggestions, describeApiError, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';
+
+      import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
 
       const apiClient = getBrowserClient();
       const REEL_PAGE_SIZE = 24;
@@ -790,6 +807,10 @@ function renderApp(url) {
         muted: bootSettings.reels.muted !== false,
         timer: null,
         progressTimer: null,
+        paused: false,
+        filtersOpen: false,
+        imageElapsed: 0,
+        imageStartedAt: null,
         animationLock: false,
         fitMedia: bootSettings.reels.fitMedia !== false,
         hideTags: true,
@@ -808,7 +829,6 @@ function renderApp(url) {
         navigationToken: 0,
         preloaded: new Map(),
         lastFeedSource: 'worker',
-        suppressClickUntil: 0,
         videoPlayback: new WeakMap(),
         tagAutocomplete: {
           items: [],
@@ -841,6 +861,37 @@ function renderApp(url) {
       const ratioBadge = document.getElementById('ratioBadge');
       const counterBadge = document.getElementById('counterBadge');
       const progressBar = document.getElementById('progressBar');
+      const reelProgress = document.getElementById('reelProgress');
+      const reelDetails = document.getElementById('reelDetails');
+      const togglePlayback = document.getElementById('togglePlayback');
+      const emptyReelFilters = document.getElementById('emptyReelFilters');
+      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+      let progressHideTimer;
+      const feedFilters = bindFeedFilters({
+        initial: { ...bootSettings.shared, tags: state.tags, sort: state.mode, rating: state.rating, ratio: state.ratio },
+        loadSettings,
+        onVisibilityChange(open) {
+          state.filtersOpen = open;
+          syncPlayback();
+        },
+        onApply({ tags, sort, rating, ratio }) {
+          Object.assign(state, { tags, mode: sort, rating, ratio });
+          modeSelect.value = sort;
+          tagsInput.value = tags;
+          ratingSelect.value = rating;
+          ratioSelect.value = ratio;
+          syncDisplaySettings();
+          restartFeed();
+        },
+      });
+      emptyReelFilters.addEventListener('click', () => feedFilters.open(emptyReelFilters));
+      togglePlayback.addEventListener('click', toggleCurrentPlayback);
+      reelDetails.addEventListener('toggle', syncPlayback);
+      reelDetails.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || !reelDetails.open) return;
+        reelDetails.open = false;
+        reelDetails.querySelector('summary').focus();
+      });
       const openPostLink = document.getElementById('openPostLink');
       const modeSelect = document.getElementById('modeSelect');
       const tagsInput = document.getElementById('tagsInput');
@@ -868,6 +919,7 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
+      updateMuteControl();
       maybeShowOnboarding();
 
       navToggleButton.addEventListener('click', (event) => {
@@ -961,9 +1013,15 @@ function renderApp(url) {
         if (state.currentMedia && state.currentMedia.tagName === 'VIDEO') {
           state.currentMedia.muted = state.muted;
         }
+        const settings = loadSettings();
+        settings.reels.muted = state.muted;
+        saveSettings(settings);
+        updateMuteControl();
+      });
+      function updateMuteControl() {
         toggleMuteButton.textContent = state.muted ? '🔇' : '🔊';
         toggleMuteButton.setAttribute('aria-label', state.muted ? 'Unmute video audio' : 'Mute video audio');
-      });
+      }
 
       dismissOnboarding.addEventListener('click', dismissOnboardingGuide);
       feedRetryButton.addEventListener('click', () => restartFeed());
@@ -1011,10 +1069,25 @@ function renderApp(url) {
       });
 
       document.addEventListener('keydown', (event) => {
-        if (event.target === tagsInput) return;
+        if (state.filtersOpen || event.defaultPrevented || event.target.closest('input, select, textarea, dialog, details, fr-floating-nav')) return;
+        if (event.code === 'Space' && !event.target.closest('button, a')) {
+          event.preventDefault();
+          if (!event.repeat) toggleCurrentPlayback();
+          return;
+        }
+        const video = state.currentMedia;
+        if (event.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(event.key) && video?.tagName === 'VIDEO' && Number.isFinite(video.duration) && video.duration > 0) {
+          event.preventDefault();
+          video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (event.key === 'ArrowRight' ? 5 : -5)));
+          setProgressValue(video.currentTime / video.duration * 100);
+          revealProgress();
+          return;
+        }
         if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+          event.preventDefault();
           goToRelativePost(1);
         } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+          event.preventDefault();
           goToRelativePost(-1);
         } else if (event.key.toLowerCase() === 'f') {
           state.fitMedia = !state.fitMedia;
@@ -1052,7 +1125,9 @@ function renderApp(url) {
           return { ...defaults, ...parsed, shared: { ...defaults.shared, ...(parsed.shared || {}) }, reels: { ...defaults.reels, ...(parsed.reels || {}) }, photos: { ...defaults.photos, ...(parsed.photos || {}) } };
         } catch { return defaults; }
       }
-      function saveSettings(settings) { window.localStorage.setItem('fr_settings_v1', JSON.stringify(settings)); }
+      function saveSettings(settings) {
+        try { window.localStorage.setItem('fr_settings_v1', JSON.stringify(settings)); } catch {}
+      }
       function mergeUrlParamsIntoSettings(settings, urlObj) {
         const mode = urlObj.searchParams.get('mode');
         const tags = (urlObj.searchParams.get('tags') || '').trim();
@@ -1125,13 +1200,14 @@ function renderApp(url) {
       function shouldIgnoreGestureTarget(target) {
         if (!target) return false;
         if (filterPanel.classList.contains('open') && filterPanel.contains(target)) return true;
-        return Boolean(target.closest('button, a, input, select, option, label, textarea, [data-tag-name]'));
+        return Boolean(target.closest('button, a, input, select, option, label, textarea, summary, [data-tag-name]'));
       }
 
       function beginGesture(point, source, event) {
-        if (state.animationLock) return false;
+        if (state.animationLock || state.filtersOpen || reelDetails.open && reelDetails.contains(event.target)) return false;
         if (filterPanel.contains(event.target) || toggleFiltersButton.contains(event.target)) return false;
         if (shouldIgnoreGestureTarget(event.target)) return false;
+        revealProgress();
         state.touchActive = true;
         state.gesturePointerId = point.identifier ?? event.pointerId ?? null;
         state.gestureSource = source;
@@ -1149,22 +1225,25 @@ function renderApp(url) {
         state.pointerDeltaY = point.clientY - state.pointerStartY;
         state.pointerDeltaX = point.clientX - state.pointerStartX;
         if (!state.dragLocked) {
-          if (state.currentMedia && state.currentMedia.tagName === 'VIDEO' && Math.abs(state.pointerDeltaX) > DRAG_LOCK_THRESHOLD && Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
+          if (state.currentMedia && state.currentMedia.tagName === 'VIDEO' && Number.isFinite(state.currentMedia.duration) && state.currentMedia.duration > 0 && Math.abs(state.pointerDeltaX) > DRAG_LOCK_THRESHOLD && Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
             state.dragLocked = true;
             state.horizontalScrubbing = true;
-            state.scrubStartTime = Number.isFinite(state.currentMedia.currentTime) ? state.currentMedia.currentTime : 0;
+            state.scrubStartTime = state.currentMedia.currentTime;
+            syncPlayback();
+          } else {
+            if (Math.abs(state.pointerDeltaY) < DRAG_LOCK_THRESHOLD) return false;
+            if (Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
+              cancelPointerGesture();
+              return false;
+            }
+            state.dragLocked = true;
           }
-          if (Math.abs(state.pointerDeltaY) < DRAG_LOCK_THRESHOLD) return false;
-          if (Math.abs(state.pointerDeltaX) > Math.abs(state.pointerDeltaY)) {
-            cancelPointerGesture();
-            return false;
-          }
-          state.dragLocked = true;
         }
         if (state.horizontalScrubbing && state.currentMedia && Number.isFinite(state.currentMedia.duration) && state.currentMedia.duration > 0) {
           const deltaSeconds = (state.pointerDeltaX / viewport.clientWidth) * state.currentMedia.duration;
           const nextTime = Math.max(0, Math.min(state.currentMedia.duration, state.scrubStartTime + deltaSeconds));
           state.currentMedia.currentTime = nextTime;
+          setProgressValue(nextTime / state.currentMedia.duration * 100);
           updateScrubHud(nextTime, state.currentMedia.duration);
           return true;
         }
@@ -1175,10 +1254,11 @@ function renderApp(url) {
       function endGesture() {
         if (!state.touchActive) return;
         if (state.horizontalScrubbing) {
-          state.horizontalScrubbing = false;
-          scrubHud.classList.remove('show');
           cancelPointerGesture();
           return;
+        }
+        if (!state.dragLocked && Math.hypot(state.pointerDeltaX, state.pointerDeltaY) <= TAP_DISTANCE_THRESHOLD) {
+          toggleCurrentPlayback();
         }
         finalizeSwipe(state.pointerDeltaY, state.dragLocked);
       }
@@ -1260,11 +1340,16 @@ function renderApp(url) {
 
       function cancelPointerGesture() {
         if (!state.touchActive) return;
+        if (state.horizontalScrubbing) {
+          state.horizontalScrubbing = false;
+          scrubHud.classList.remove('show');
+          syncPlayback();
+        }
         finalizeSwipe(0, false);
       }
 
       function handleWheel(event) {
-        if (filterPanel.classList.contains('open') || state.animationLock) return;
+        if (filterPanel.classList.contains('open') || state.animationLock || reelDetails.open || state.filtersOpen) return;
         if (Math.abs(event.deltaY) < WHEEL_THRESHOLD) return;
         event.preventDefault();
         goToRelativePost(event.deltaY > 0 ? 1 : -1);
@@ -1283,9 +1368,6 @@ function renderApp(url) {
         state.gesturePointerId = null;
         state.gestureSource = null;
         const direction = wasDragging && deltaY <= -SWIPE_THRESHOLD ? 1 : wasDragging && deltaY >= SWIPE_THRESHOLD ? -1 : 0;
-        if (wasDragging) {
-          state.suppressClickUntil = Date.now() + 400;
-        }
         if (direction === 0) {
           animateTrackTo(0);
           return;
@@ -1462,6 +1544,13 @@ function renderApp(url) {
 
       async function restartFeed() {
         state.feedGeneration += 1;
+        state.navigationToken += 1;
+        state.animationLock = false;
+        state.currentMedia?.pause?.();
+        state.preloaded.forEach(({ media }) => media.pause?.());
+        reelDetails.open = false;
+        reelDetails.hidden = true;
+        togglePlayback.disabled = true;
         clearTimers();
         state.posts = [];
         state.currentIndex = 0;
@@ -1521,7 +1610,7 @@ function renderApp(url) {
           state.nextPage += 1;
 
           if (!state.posts.length) {
-            renderEmpty('No posts found', 'Try different tags or remove the rating filter.');
+            renderEmpty('No posts found', 'Try different tags or remove a filter.', { editFilters: true });
             return;
           }
 
@@ -1574,7 +1663,7 @@ function renderApp(url) {
         return ['vertical', 'landscape'].includes(value) ? value : '';
       }
 
-      function renderStatus(title, body, { retry = false } = {}) {
+      function renderStatus(title, body, { retry = false, editFilters = false } = {}) {
         statusCard.hidden = false;
         statusTitle.textContent = title;
         statusText.textContent = body;
@@ -1582,6 +1671,7 @@ function renderApp(url) {
         feedStatusTitle.textContent = title;
         feedStatusText.textContent = body;
         feedRetryButton.hidden = !retry;
+        emptyReelFilters.hidden = !editFilters;
       }
 
       function hideStatus() {
@@ -1618,23 +1708,66 @@ function renderApp(url) {
         }
       }
 
+      function revealProgress() {
+        if (!state.currentMedia) return;
+        reelProgress.classList.add('show');
+        clearTimeout(progressHideTimer);
+        progressHideTimer = setTimeout(() => reelProgress.classList.remove('show'), 2200);
+      }
+
+      function playbackBlocked() {
+        return state.paused || state.filtersOpen || reelDetails.open || state.horizontalScrubbing;
+      }
+
+      function updatePlaybackButton() {
+        const media = state.currentMedia;
+        togglePlayback.disabled = !media || state.currentSlide.classList.contains('failed');
+        togglePlayback.textContent = state.paused || (media?.tagName === 'VIDEO' && media.paused) ? 'Play' : 'Pause';
+      }
+
+      function toggleCurrentPlayback() {
+        const media = state.currentMedia;
+        if (!media || togglePlayback.disabled) return;
+        state.paused = media.tagName === 'VIDEO' ? !media.paused : !state.paused;
+        revealProgress();
+        syncPlayback();
+      }
+
+      function syncPlayback() {
+        const media = state.currentMedia;
+        if (!media) return;
+        const blocked = playbackBlocked() || state.currentSlide.classList.contains('failed');
+        if (media.tagName === 'VIDEO') {
+          if (blocked) media.pause();
+          else if (media.paused) media.play().catch(updatePlaybackButton);
+        } else if (blocked) {
+          if (state.imageStartedAt !== null) state.imageElapsed += Date.now() - state.imageStartedAt;
+          state.imageStartedAt = null;
+          clearTimers(false);
+        } else if (media.complete && media.naturalWidth && state.imageStartedAt === null) {
+          scheduleImageAdvance();
+        }
+        updatePlaybackButton();
+      }
+
       function scheduleImageAdvance() {
-        clearTimers();
-        const startedAt = Date.now();
-        state.timer = setTimeout(() => goToRelativePost(1), IMAGE_COUNTDOWN_MS);
+        clearTimers(false);
+        state.imageStartedAt = Date.now();
+        state.timer = setTimeout(() => {
+          state.imageStartedAt = null;
+          clearTimers(false);
+          if (!playbackBlocked()) goToRelativePost(1);
+        }, Math.max(0, IMAGE_COUNTDOWN_MS - state.imageElapsed));
         state.progressTimer = setInterval(() => {
-          const elapsed = Date.now() - startedAt;
+          const elapsed = state.imageElapsed + Date.now() - state.imageStartedAt;
           setProgressValue((elapsed / IMAGE_COUNTDOWN_MS) * 100);
-          if (elapsed >= IMAGE_COUNTDOWN_MS) {
-            clearTimers(false);
-          }
         }, 100);
       }
 
       function watchVideoProgress(video) {
-        clearTimers();
+        clearTimers(false);
         const update = () => {
-          setProgressValue(getVideoPlaybackProgress(video) * 100);
+          setProgressValue(video.duration ? video.currentTime / video.duration * 100 : 0);
         };
         update();
         state.progressTimer = setInterval(update, 120);
@@ -1692,7 +1825,7 @@ function renderApp(url) {
           setCurrentSlide(entry.slide, entry.media);
           refreshTrackSlides();
           updateMeta(post);
-          startPlaybackForPost(post, entry.media, entry.slide);
+          startPlaybackForPost(post, entry.media);
           ensureAdjacentSlides();
           schedulePreloadAroundIndex(index);
           if (state.posts.length - index <= 4) {
@@ -1729,7 +1862,7 @@ function renderApp(url) {
           refreshTrackSlides();
           updateMeta(post);
           ensureAdjacentSlides();
-          startPlaybackForPost(post, targetEntry.media, targetEntry.slide);
+          startPlaybackForPost(post, targetEntry.media);
 
           if (state.posts.length - index <= 4) {
             loadPosts(false);
@@ -1748,6 +1881,7 @@ function renderApp(url) {
       function setCurrentSlide(slide, media) {
         state.currentSlide = slide;
         state.currentMedia = media;
+        reelDetails.hidden = false;
       }
 
       // Registers the slide synchronously: with an await before preloaded.set(), two callers in the same
@@ -1763,16 +1897,18 @@ function renderApp(url) {
       }
 
       function refreshTrackSlides() {
-        reelTrack.innerHTML = '';
-        if (!state.posts.length) return;
-
-        const indexes = [state.currentIndex - 1, state.currentIndex, state.currentIndex + 1].filter((index) => index >= 0 && index < state.posts.length);
-        indexes.forEach((index) => {
-          const entry = state.preloaded.get(index);
-          if (!entry) return;
-          positionSlide(entry.slide, (index - state.currentIndex) * 100);
-          reelTrack.appendChild(entry.slide);
-        });
+        const entries = [state.currentIndex - 1, state.currentIndex, state.currentIndex + 1]
+          .map(index => [index, state.preloaded.get(index)])
+          .filter(([, entry]) => entry);
+        const visibleSlides = new Set(entries.map(([, entry]) => entry.slide));
+        for (const slide of [...reelTrack.children]) {
+          if (!visibleSlides.has(slide)) slide.remove();
+        }
+        for (const [index, { slide }] of entries) {
+          positionSlide(slide, (index - state.currentIndex) * 100);
+          slide.inert = index !== state.currentIndex;
+          if (slide.parentNode !== reelTrack) reelTrack.appendChild(slide);
+        }
       }
 
       function prunePreloaded(centerIndex) {
@@ -1808,6 +1944,22 @@ function renderApp(url) {
         loadIndicator.setAttribute('aria-live', 'polite');
         loadIndicator.innerHTML = '<span class="load-indicator-dot" aria-hidden="true"></span><span>Loading media</span>';
         slide.appendChild(loadIndicator);
+        const failure = document.createElement('div');
+        failure.className = 'media-error';
+        failure.hidden = true;
+        failure.innerHTML = '<p role="status">This reel could not load.</p><button type="button" class="feed-control">Retry</button> <button type="button" class="feed-control">Next</button>';
+        const [retry, next] = failure.querySelectorAll('button');
+        next.addEventListener('click', () => goToRelativePost(1));
+        retry.addEventListener('click', () => {
+          slide.classList.remove('failed');
+          slide.classList.add('loading');
+          failure.hidden = true;
+          if (media.tagName === 'VIDEO') media.load();
+          else media.src = post.mediaUrl;
+          syncPlayback();
+          togglePlayback.focus({ preventScroll: true });
+        });
+        slide.appendChild(failure);
 
         let media;
         if (post.type === 'video') {
@@ -1821,20 +1973,25 @@ function renderApp(url) {
           media.controls = false;
           media.autoplay = false;
           media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
-          media.addEventListener('loadeddata', () => slide.classList.remove('loading'), { once: true });
+          media.addEventListener('loadeddata', () => slide.classList.remove('loading'));
           media.addEventListener('loadedmetadata', () => initializeVideoPlayback(media));
           media.addEventListener('ended', () => {
             handleVideoEnded(media);
           });
           media.addEventListener('play', () => {
             markVideoPlaybackStarted(media);
-            if (state.currentMedia === media) watchVideoProgress(media);
+            if (state.currentMedia === media) {
+              if (playbackBlocked()) media.pause();
+              else watchVideoProgress(media);
+              updatePlaybackButton();
+            }
             slide.classList.remove('awaiting-play');
           });
           media.addEventListener('pause', () => {
             finalizeVideoPlaybackChunk(media);
             if (state.currentMedia === media && !media.ended) {
               clearTimers(false);
+              updatePlaybackButton();
             }
           });
           media.addEventListener('waiting', () => slide.classList.add('awaiting-play'));
@@ -1846,47 +2003,33 @@ function renderApp(url) {
           media.loading = 'eager';
           media.decoding = 'async';
           media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
-          media.addEventListener('load', () => slide.classList.remove('loading'), { once: true });
+          media.addEventListener('load', () => {
+            slide.classList.remove('loading');
+            if (state.currentMedia === media) syncPlayback();
+          });
         }
 
-        media.addEventListener('click', (event) => {
-          if (Date.now() < state.suppressClickUntil) {
-            event.preventDefault();
-            return;
-          }
-          if (state.touchActive) return;
-          if (Math.abs(state.pointerDeltaY) > TAP_DISTANCE_THRESHOLD) return;
-          if (media.tagName === 'VIDEO') {
-            if (media.paused) {
-              media.play().catch(() => {});
-            } else {
-              media.pause();
-            }
-          } else {
-            goToRelativePost(1, { animated: true });
-          }
+        media.addEventListener('error', () => {
+          slide.classList.add('failed');
+          slide.classList.remove('loading', 'awaiting-play');
+          failure.hidden = false;
+          if (state.currentMedia === media) syncPlayback();
         });
 
         slide.appendChild(media);
         return { slide, media, post };
       }
 
-      function startPlaybackForPost(post, media, slide) {
+      function startPlaybackForPost(post, media) {
+        state.imageElapsed = 0;
+        state.imageStartedAt = null;
+        clearTimers();
         if (post.type === 'video') {
           resetVideoPlayback(media);
-          media.currentTime = 0;
+          if (media.readyState) media.currentTime = 0;
           media.muted = state.muted;
-          slide.classList.add('awaiting-play');
-          media.play().then(() => {
-            watchVideoProgress(media);
-          }).catch(() => {
-            slide.classList.add('awaiting-play');
-            clearTimers();
-          });
-        } else {
-          slide.classList.remove('loading');
-          scheduleImageAdvance();
         }
+        syncPlayback();
       }
 
       function updateMeta(post) {
@@ -1940,7 +2083,7 @@ function renderApp(url) {
       }
 
       function animateTrackTo(targetY, withTransition = true) {
-        if (withTransition) {
+        if (withTransition && !reducedMotion.matches) {
           reelTrack.classList.add('animating');
           reelTrack.style.transform = 'translate3d(0, ' + targetY + 'px, 0)';
           return new Promise((resolve) => {
@@ -1997,16 +2140,9 @@ function renderApp(url) {
         playback.startedAt = null;
       }
 
-      function getVideoPlaybackProgress(video) {
-        initializeVideoPlayback(video);
-        const playback = state.videoPlayback.get(video);
-        if (!playback) return 0;
-        const activeMs = playback.startedAt === null ? 0 : Math.max(0, Date.now() - playback.startedAt);
-        return Math.max(0, Math.min(1, (playback.totalMs + activeMs) / playback.targetMs));
-      }
-
       function handleVideoEnded(video) {
         finalizeVideoPlaybackChunk(video);
+        if (state.currentMedia !== video || playbackBlocked()) return;
         const playback = state.videoPlayback.get(video);
         if (!playback) return;
         if (playback.totalMs + 50 < playback.targetMs) {
@@ -2052,19 +2188,64 @@ function renderApp(url) {
 </html>`;
 }
 
+function renderFeedFilterStyles() {
+  return `
+    .feed-control{min-height:44px;padding:0 13px;border:1px solid #ffffff42;border-radius:12px;background:#16161e;color:#fff;font:600 .85rem system-ui;cursor:pointer}
+    .feed-control:focus-visible,.feed-filter-sheet :is(input,select):focus-visible,.tile:focus-visible,#reelDetails summary:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+    .feed-filter-trigger{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 68px);z-index:60}
+    .feed-filter-sheet{box-sizing:border-box;position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;max-height:90dvh;overflow:auto;color:#fff;background:#15151e;border:1px solid #ffffff30;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));touch-action:pan-y}
+    .feed-filter-sheet::backdrop{background:#0009}.feed-filter-sheet form{display:grid;gap:12px}.feed-filter-sheet header,.feed-filter-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.feed-filter-sheet h2{margin:0;font-size:1.2rem}
+    .feed-filter-sheet label{display:grid;gap:5px;font-size:.88rem}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid #ffffff42;border-radius:10px;background:#0b0b10;color:#fff;padding:8px;font:inherit;font-size:1rem}
+    .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:#ff70aa;color:#170811;border-color:transparent}.feed-filter-sheet p{margin:0;color:#c4c2cb;font-size:.8rem}
+    .media-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;padding:14px;border-radius:14px;background:#15151ef2;color:#fff;text-align:center;min-width:175px}.media-error p{margin:0 0 8px}.media-error[hidden]{display:none}
+  `;
+}
+
+function renderFeedFilters() {
+  return `<button type="button" class="feed-control feed-filter-trigger" id="openFeedFilters" aria-haspopup="dialog">Filters</button>
+    <dialog class="feed-filter-sheet" id="feedFilters" aria-labelledby="feedFiltersTitle">
+      <form><header><h2 id="feedFiltersTitle">Feed filters</h2><button type="button" class="feed-control" data-close-filters>Close</button></header>
+        <label>Tags<input name="tags" autocomplete="off" placeholder="Search by tags"/></label>
+        <div class="feed-filter-row"><label>Rating<select name="rating"><option value="">Any rating</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label>
+        <label>Sort<select name="sort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label></div>
+        <label>Aspect ratio<select name="ratio"><option value="">Any ratio</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label>
+        <p>Your URL may include these filters if URL sharing is enabled in Settings.</p>
+        <div class="feed-filter-actions"><button type="reset" class="feed-control">Clear filters</button><button type="submit" class="feed-control feed-filter-submit">Apply filters</button></div>
+      </form>
+    </dialog>`;
+}
+
 function renderPhotoGridPage(url) {
   const skeletonTiles = '<div class="tile skeleton" aria-hidden="true"></div>'.repeat(12);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
   <link rel="preconnect" href="https://e621.net" crossorigin/><link rel="preconnect" href="https://static1.e621.net"/>
   <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}"/><link rel="modulepreload" href="${clientAssetUrl('photo-feed.js')}"/>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox.open{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}
-  .error[hidden]{display:none}.tile.skeleton{cursor:default;background:linear-gradient(100deg,#101014 30%,#1b1b22 50%,#101014 70%);background-size:300% 100%;animation:tile-shimmer 1.3s linear infinite}@keyframes tile-shimmer{from{background-position:100% 0}to{background-position:0 0}}@media (prefers-reduced-motion:reduce){.tile.skeleton{animation:none}}.tile.broken{display:grid;place-items:center;color:rgba(255,255,255,.45);font-size:.8rem}.tile.broken::after{content:'Image unavailable'}.retry-btn{display:block;margin-top:8px;border:1px solid rgba(255,255,255,.3);background:#1a1a24;color:#fff;border-radius:8px;padding:6px 12px;font:600 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer}.retry-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}</style></head>
-  <body>${renderFloatingNav('photos')}<div class="frame"><main class="grid" id="grid" aria-busy="true">${skeletonTiles}</main>
+  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox[open]{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}
+  .error[hidden]{display:none}.tile.skeleton{cursor:default;background:linear-gradient(100deg,#101014 30%,#1b1b22 50%,#101014 70%);background-size:300% 100%;animation:tile-shimmer 1.3s linear infinite}@keyframes tile-shimmer{from{background-position:100% 0}to{background-position:0 0}}@media (prefers-reduced-motion:reduce){.tile.skeleton{animation:none}}.tile.broken{display:grid;place-items:center;color:rgba(255,255,255,.45);font-size:.8rem}.tile.broken::after{content:'Image unavailable'}.retry-btn{display:block;margin-top:8px;border:1px solid rgba(255,255,255,.3);background:#1a1a24;color:#fff;border-radius:8px;padding:6px 12px;font:600 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer}.retry-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+  ${renderFeedFilterStyles()}
+  html{scrollbar-gutter:stable}.frame{padding-top:64px}.tile:not(.skeleton){padding:0;border:0;color:#fff;min-width:0}
+  .lightbox{box-sizing:border-box;margin:0;padding:0;border:0;width:100%;height:100%;max-width:none;max-height:none;color:#fff;touch-action:pan-y}
+  .lightbox::backdrop{background:#000}.lightbox-slide{position:relative;box-sizing:border-box;display:grid;align-items:safe center;overscroll-behavior:contain;touch-action:pan-y}
+  .lightbox-slide img[hidden]{display:none}.lightbox-slide img{background-position:center;background-repeat:no-repeat;background-size:contain}
+  .lightbox-close{position:absolute;z-index:4;top:calc(12px + env(safe-area-inset-top,0px));right:12px}.lightbox-nav{position:absolute;z-index:4;top:50%;transform:translateY(-50%)}.lightbox-nav:disabled{display:none}.lightbox-prev{left:12px}.lightbox-next{right:12px}
+  .lightbox .credit{pointer-events:none;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}.lightbox .credit a{pointer-events:auto}
+  .photo-empty{margin:0 14px 14px}.photo-empty[hidden]{display:none}
+  @media(prefers-reduced-motion:reduce){.lightbox-track.animating,body.page-transitioning{transition:none}}
+  </style></head>
+  <body>${renderFloatingNav('photos')}${renderFeedFilters()}<div class="frame"><main class="grid" id="grid" aria-busy="true">${skeletonTiles}</main>
   <div class="status" id="status" role="status" aria-live="polite">Loading photos…</div><div class="error" id="errorBox" role="alert" hidden><span id="errorText"></span><button type="button" class="retry-btn" id="retryButton">Try again</button></div>
-  <div class="lightbox" id="lightbox"><div class="swipe-arrow left">‹</div><div class="swipe-arrow right">›</div><div class="down-hint" id="downHint">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div><div class="credit" id="lightboxCredit"></div></div>
+  <button type="button" class="feed-control photo-empty" id="emptyPhotoFilters" hidden>Edit filters</button></div>
+  <dialog class="lightbox" id="lightbox" aria-label="Photo viewer">
+    <button type="button" class="feed-control lightbox-close" id="closePhoto" autofocus>Close</button>
+    <button type="button" class="feed-control lightbox-nav lightbox-prev" id="previousPhoto" aria-label="Previous photo">‹</button>
+    <button type="button" class="feed-control lightbox-nav lightbox-next" id="nextPhoto" aria-label="Next photo">›</button>
+    <div class="down-hint" id="downHint" aria-hidden="true">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div>
+    <div class="credit" id="lightboxCredit"></div>
+  </dialog>
   <script>${renderFloatingNavScript()}</script><script type="module">
 import { getBrowserClient, describeApiError } from '${clientAssetUrl('e621-client.js')}';
 import { createPhotoFeed, photoTagsFromSettings } from '${clientAssetUrl('photo-feed.js')}';
+import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
 
 const grid = document.getElementById('grid');
 const status = document.getElementById('status');
@@ -2075,6 +2256,15 @@ const lightbox = document.getElementById('lightbox');
 const lightboxTrack = document.getElementById('lightboxTrack');
 const lightboxCredit = document.getElementById('lightboxCredit');
 const downHint = document.getElementById('downHint');
+const closePhoto = document.getElementById('closePhoto');
+const previousPhoto = document.getElementById('previousPhoto');
+const nextPhoto = document.getElementById('nextPhoto');
+const emptyPhotoFilters = document.getElementById('emptyPhotoFilters');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let lightboxOpener = null;
+let lightboxMoveTimer = null;
+let lightboxDirection = null;
+let savedOverflow = '';
 const BATCH_SIZE = 18;
 const LOOKAHEAD_PX = 1000;
 const SKELETON_COUNT = 6;
@@ -2113,11 +2303,40 @@ function mergeUrlParamsIntoSettings(settings, url) {
   return settings;
 }
 
-const tags = photoTagsFromSettings(mergeUrlParamsIntoSettings(loadSettings(), new URL(window.location.href)).shared);
+const initialFilters = mergeUrlParamsIntoSettings(loadSettings(), new URL(window.location.href)).shared;
+let tags = photoTagsFromSettings(initialFilters);
 const client = getBrowserClient();
-const feed = createPhotoFeed({ client, tags, onChange: renderStatus });
+let feedAbort = new AbortController();
+let feed = makeFeed();
 const sentinel = document.createElement('div');
 grid.after(sentinel);
+
+function makeFeed() {
+  const signal = feedAbort.signal;
+  return createPhotoFeed({ client, tags, signal, onChange: () => {
+    if (!signal.aborted) renderStatus();
+  } });
+}
+
+const feedFilters = bindFeedFilters({
+  initial: initialFilters,
+  loadSettings,
+  onApply(filters) {
+    tags = photoTagsFromSettings(filters);
+    feedAbort.abort();
+    feedAbort = new AbortController();
+    feed = makeFeed();
+    allPosts.length = 0;
+    grid.replaceChildren();
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = null;
+    window.scrollTo(0, 0);
+    saveGridPosition();
+    renderStatus();
+    pump();
+  },
+});
+emptyPhotoFilters.addEventListener('click', () => feedFilters.open(emptyPhotoFilters));
 
 function uniqueUrls(urls) {
   return urls.filter((value, index) => value && urls.indexOf(value) === index);
@@ -2169,8 +2388,10 @@ function renderTiles(posts) {
   const fragment = document.createDocumentFragment();
   posts.forEach((post) => {
     const postIndex = allPosts.push(post) - 1;
-    const tile = document.createElement('article');
+    const tile = document.createElement('button');
+    tile.type = 'button';
     tile.className = 'tile';
+    tile.setAttribute('aria-label', 'Open photo ' + (postIndex + 1));
     tile.dataset.index = String(postIndex);
     const image = document.createElement('img');
     image.alt = 'e621 image ' + (post.id || '');
@@ -2188,6 +2409,7 @@ function renderTiles(posts) {
     fragment.appendChild(tile);
   });
   grid.appendChild(fragment);
+  if (lightbox.open) nextPhoto.disabled = lightboxIndex >= allPosts.length - 1;
 }
 
 function minutesAgo(timestamp) {
@@ -2206,6 +2428,7 @@ function renderStatus() {
   const loading = state.phase === 'loading';
   grid.setAttribute('aria-busy', loading ? 'true' : 'false');
   errorBox.hidden = true;
+  emptyPhotoFilters.hidden = true;
   if (!loading) removeSkeletons();
   if (loading) {
     if (state.attempt > 1) status.textContent = describeApiError(state.retryError) + ' — retrying (attempt ' + state.attempt + ' of ' + state.maxAttempts + ')…';
@@ -2220,7 +2443,8 @@ function renderStatus() {
   }
   if (state.staleSince) showError('Showing saved results from ' + minutesAgo(state.staleSince) + ' because ' + describeApiError(state.error) + '.');
   if (state.phase === 'done' && !loaded && !queued) {
-    status.textContent = (state.endReason === 'sparse' ? 'No image posts found' : 'No photos match') + ' these filters. Try different tags in Settings.';
+    status.textContent = (state.endReason === 'sparse' ? 'No image posts found' : 'No photos match') + ' these filters.';
+    emptyPhotoFilters.hidden = false;
     return;
   }
   if (state.phase === 'done' && !queued) {
@@ -2264,7 +2488,9 @@ async function pump() {
         }
         if (!feed.canLoad) break;
         showSkeletons();
-        if ((await feed.loadNextPage()) === null) break;
+        const requestedFeed = feed;
+        const result = await requestedFeed.loadNextPage();
+        if (result === null && requestedFeed === feed) break;
       }
     } while (pumpAgain);
   } finally {
@@ -2351,9 +2577,34 @@ function buildLightboxSlide(post, isCurrent) {
     image.width = post.width;
     image.height = post.height;
   }
-  setImageWithFallback(image, lightboxUrls(post), () => {});
-  if (isCurrent && wantsOriginal(post)) upgradeToOriginal(image, post);
-  slide.appendChild(image);
+  slide.inert = !isCurrent;
+  const failure = document.createElement('div');
+  failure.className = 'media-error';
+  failure.hidden = true;
+  failure.innerHTML = '<p role="status">This photo could not load.</p><button type="button" class="feed-control">Retry</button> <button type="button" class="feed-control">Next</button>';
+  const [retry, skip] = failure.querySelectorAll('button');
+  skip.hidden = !allPosts[lightboxIndex + 1];
+  skip.addEventListener('click', () => {
+    closePhoto.focus({ preventScroll: true });
+    settleMove(1);
+  });
+  function load() {
+    failure.hidden = true;
+    image.hidden = false;
+    image.style.backgroundImage = post.previewUrl ? 'url(' + JSON.stringify(post.previewUrl) + ')' : '';
+    setImageWithFallback(image, lightboxUrls(post), () => {
+      image.hidden = true;
+      failure.hidden = false;
+    });
+    if (isCurrent && wantsOriginal(post)) upgradeToOriginal(image, post);
+  }
+  image.addEventListener('load', () => { image.style.backgroundImage = ''; });
+  retry.addEventListener('click', () => {
+    load();
+    closePhoto.focus({ preventScroll: true });
+  });
+  slide.append(image, failure);
+  load();
   return slide;
 }
 
@@ -2369,7 +2620,7 @@ function updateLightboxCredit(post) {
 }
 
 function setLightboxTrack(offsetPx, animated) {
-  lightboxTrack.classList.toggle('animating', Boolean(animated));
+  lightboxTrack.classList.toggle('animating', Boolean(animated) && !reducedMotion.matches);
   lightboxTrack.style.transform = 'translate3d(' + offsetPx + 'px,0,0)';
 }
 
@@ -2380,6 +2631,9 @@ function currentBase() {
 function renderLightboxAt(index) {
   if (index < 0 || index >= allPosts.length) return;
   lightboxIndex = index;
+  previousPhoto.disabled = index === 0;
+  nextPhoto.disabled = index === allPosts.length - 1;
+  if (document.activeElement?.disabled) closePhoto.focus({ preventScroll: true });
   const prev = allPosts[index - 1] || null;
   const current = allPosts[index];
   const next = allPosts[index + 1] || null;
@@ -2394,51 +2648,64 @@ function renderLightboxAt(index) {
   updateLightboxCredit(current);
 }
 
-function openLightbox(index) {
+function openLightbox(index, tile) {
   if (index < 0 || index >= allPosts.length) return;
+  lightboxOpener = tile;
+  savedOverflow = document.documentElement.style.overflow;
+  document.documentElement.style.overflow = 'hidden';
   renderLightboxAt(index);
-  lightbox.classList.add('open');
+  lightbox.showModal();
+  closePhoto.focus({ preventScroll: true });
 }
 
-function closeLightbox() {
+lightbox.addEventListener('close', () => {
   cancelOriginal();
-  lightbox.classList.remove('open');
-  lightboxTrack.innerHTML = '';
+  clearTimeout(lightboxMoveTimer);
+  lightboxMoveTimer = null;
+  lightboxTouchActive = false;
+  lightboxTrack.replaceChildren();
   lightboxIndex = -1;
   downHint.classList.remove('show');
-}
+  document.documentElement.style.overflow = savedOverflow;
+  lightboxOpener?.focus({ preventScroll: true });
+  lightboxOpener = null;
+});
+closePhoto.addEventListener('click', () => lightbox.close());
+previousPhoto.addEventListener('click', () => settleMove(-1));
+nextPhoto.addEventListener('click', () => settleMove(1));
 
 function settleMove(delta) {
-  if (lightboxIndex < 0) return;
+  if (lightboxIndex < 0 || lightboxMoveTimer !== null) return;
   const next = lightboxIndex + delta;
   if (next < 0 || next >= allPosts.length) {
     setLightboxTrack(lightboxBaseX, true);
     return;
   }
-  const target = delta > 0 ? lightboxBaseX - window.innerWidth : lightboxBaseX + window.innerWidth;
-  setLightboxTrack(target, true);
-  setTimeout(() => {
+  if (reducedMotion.matches) {
     renderLightboxAt(next);
+    return;
+  }
+  const target = lightboxBaseX - delta * window.innerWidth;
+  setLightboxTrack(target, true);
+  lightboxMoveTimer = setTimeout(() => {
+    lightboxMoveTimer = null;
+    if (lightbox.open) renderLightboxAt(next);
   }, 280);
 }
 
 grid.addEventListener('click', (event) => {
-  const tile = event.target.closest('.tile');
-  if (!tile) return;
-  openLightbox(Number(tile.dataset.index || '-1'));
+  const tile = event.target.closest('button.tile');
+  if (tile) openLightbox(Number(tile.dataset.index), tile);
 });
-lightbox.addEventListener('click', (event) => {
-  if (event.target === lightbox || event.target === lightboxCredit) closeLightbox();
-});
-document.addEventListener('keydown', (event) => {
-  if (!lightbox.classList.contains('open')) return;
-  if (event.key === 'Escape') closeLightbox();
-  if (event.key === 'ArrowDown' || event.key === 'ArrowRight') settleMove(1);
-  if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') settleMove(-1);
+lightbox.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  settleMove(event.key === 'ArrowRight' ? 1 : -1);
 });
 lightbox.addEventListener('touchstart', (event) => {
-  if (!lightbox.classList.contains('open')) return;
+  if (lightboxMoveTimer !== null || event.touches.length !== 1 || event.target.closest('button, a')) return;
   lightboxTouchActive = true;
+  lightboxDirection = null;
   lightboxTouchStartX = event.touches[0].clientX;
   lightboxTouchStartY = event.touches[0].clientY;
   lightboxBaseX = currentBase();
@@ -2448,8 +2715,9 @@ lightbox.addEventListener('touchmove', (event) => {
   if (!lightboxTouchActive) return;
   const dx = event.touches[0].clientX - lightboxTouchStartX;
   const dy = event.touches[0].clientY - lightboxTouchStartY;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    event.preventDefault();
+  if (!lightboxDirection && Math.hypot(dx, dy) >= 10) lightboxDirection = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+  if (lightboxDirection === 'x') {
+    if (event.cancelable) event.preventDefault();
     setLightboxTrack(lightboxBaseX + dx, false);
   }
 }, { passive: false });
@@ -2457,22 +2725,22 @@ lightbox.addEventListener('touchend', (event) => {
   if (!lightboxTouchActive) return;
   lightboxTouchActive = false;
   const dx = event.changedTouches[0].clientX - lightboxTouchStartX;
-  const dy = event.changedTouches[0].clientY - lightboxTouchStartY;
-  const threshold = window.innerWidth * 0.4;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    if (dx <= -threshold) {
-      settleMove(1);
-      return;
-    }
-    if (dx >= threshold) {
-      settleMove(-1);
-      return;
-    }
+  if (lightboxDirection === 'x' && Math.abs(dx) >= window.innerWidth * 0.4) {
+    settleMove(dx < 0 ? 1 : -1);
+  } else {
     setLightboxTrack(lightboxBaseX, true);
-    return;
   }
-  setLightboxTrack(lightboxBaseX, true);
 }, { passive: true });
+lightbox.addEventListener('touchcancel', () => {
+  if (!lightboxTouchActive) return;
+  lightboxTouchActive = false;
+  setLightboxTrack(lightboxBaseX, false);
+});
+window.addEventListener('resize', () => {
+  if (!lightbox.open || lightboxMoveTimer !== null) return;
+  lightboxBaseX = currentBase();
+  setLightboxTrack(lightboxBaseX, false);
+});
 
 new IntersectionObserver((entries) => {
   if (entries.some((entry) => entry.isIntersecting)) pump();
