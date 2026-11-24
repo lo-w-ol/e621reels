@@ -350,3 +350,9 @@ When making changes in this repository, append entries to this file so the next 
 - Show all of a post's reported tags in a scrollable picker. Preview the selected tag combined with the current feed query through e621's rate-limited /posts/count.json endpoint.
 - Validate up to three result pages before saving a new tag. An empty or failed search keeps the current feed and filters. A valid search seeds the refreshed feed with the checked pages.
 - Verify tag mapping and capped count handling, and exercise repeated additions and rollback in both browser viewers.
+
+## 2026-11-24 — Expose More like this and stabilize reel previews
+
+- Put More like this beside Post details as soon as a reel is available.
+- Use the viewer fit setting and the video dimensions to size loading thumbnails. Reveal the decoded frame when it is ready and keep it visible during buffering.
+- Verified the action and video transition in Chromium at 320px and 1200px with square thumbnails for tall and wide videos.

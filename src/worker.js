@@ -169,23 +169,13 @@ function renderApp(url) {
         inset: 0;
         background: #000;
         overflow: hidden;
+        container-type: size;
       }
       .reel-slide.placeholder {
         display: grid;
         place-items: center;
         color: var(--muted);
         font-size: 0.95rem;
-      }
-      .reel-slide::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-image: var(--preview-image, none);
-        background-size: cover;
-        background-position: center;
-        filter: blur(28px) saturate(0.9);
-        transform: scale(1.08);
-        opacity: 0.55;
       }
       .reel-media,
       .reel-media-fallback {
@@ -198,18 +188,23 @@ function renderApp(url) {
       .reel-media {
         object-fit: cover;
       }
-      .reel-media.fit {
+      .reel-slide.fit .reel-media {
         object-fit: contain;
       }
       .reel-media-fallback {
         background-size: cover;
         background-position: center;
+        background-repeat: no-repeat;
         opacity: 0;
-        transition: opacity 180ms ease;
       }
-      .reel-slide.loading .reel-media-fallback,
-      .reel-slide.awaiting-play .reel-media-fallback {
-        opacity: 0.92;
+      .reel-slide.fit .reel-media-fallback {
+        width: min(100%, calc(100cqh * var(--video-aspect)));
+        height: min(100%, calc(100cqw / var(--video-aspect)));
+        margin: auto;
+        background-size: var(--preview-fit, contain);
+      }
+      .reel-slide.loading .reel-media-fallback {
+        opacity: 1;
       }
       .load-indicator {
         position: absolute;
@@ -332,8 +327,9 @@ function renderApp(url) {
       }
       .bottom {
         display: flex;
+        flex-wrap: wrap;
         justify-content: space-between;
-        gap: 14px;
+        gap: 8px;
         align-items: end;
       }
       .meta {
@@ -381,7 +377,11 @@ function renderApp(url) {
       #reelDetails{position:relative;max-width:min(66vw,380px);color:#fff}#reelDetails[open]{background:#14141ef2;border-radius:12px}
       #reelDetails summary{display:list-item;box-sizing:border-box;padding:11px;min-height:44px}
       #reelDetails .credit{border:0;background:none;border-radius:0;padding:4px 11px 12px;overflow-wrap:anywhere}
-      .overlay > .bottom{grid-row:2;pointer-events:none}.bottom > :is(details,.reel-controls){pointer-events:auto}
+      .overlay > .bottom{grid-row:2;pointer-events:none}
+      .reel-post-actions{display:flex;align-items:end;gap:8px;max-width:100%}
+      .reel-post-actions[hidden]{display:none}
+      .reel-post-actions button{flex:none}
+      .reel-post-actions > *,.bottom > .reel-controls{pointer-events:auto}
       .reel-controls{margin-inline-start:auto;align-self:end}.reel-controls button{min-width:44px;min-height:44px}.reel-controls button:disabled{opacity:.5;cursor:default}
       .reel-slide[inert] .load-indicator{opacity:0}
       .reel-slide.failed .reel-media-fallback{opacity:.6}
@@ -731,11 +731,13 @@ function renderApp(url) {
         </div>
         <section class="overlay">
           <div class="bottom">
-            <details id="reelDetails" hidden>
-              <summary class="feed-control">Post details</summary>
-              <div class="meta" id="metaBlock"><div class="credit" id="postDescription"></div></div>
+            <div class="reel-post-actions" id="reelPostActions" hidden>
+              <details id="reelDetails">
+                <summary class="feed-control">Post details</summary>
+                <div class="meta" id="metaBlock"><div class="credit" id="postDescription"></div></div>
+              </details>
               ${renderMoreLikeThisButton()}
-            </details>
+            </div>
             <div class="side-actions reel-controls">
               <button type="button" class="feed-control" id="togglePlayback" disabled>Pause</button>
               <button class="action-button focus-ring" id="toggleMuteButton" type="button" aria-label="Unmute video audio">🔇</button>
@@ -873,6 +875,7 @@ function renderApp(url) {
       const progressBar = document.getElementById('progressBar');
       const reelProgress = document.getElementById('reelProgress');
       const reelDetails = document.getElementById('reelDetails');
+      const reelPostActions = document.getElementById('reelPostActions');
       const togglePlayback = document.getElementById('togglePlayback');
       const emptyReelFilters = document.getElementById('emptyReelFilters');
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1118,7 +1121,7 @@ function renderApp(url) {
           state.fitMedia = !state.fitMedia;
           mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
           syncDisplaySettings();
-              rerenderCurrentSlide();
+          for (const { slide } of state.preloaded.values()) slide.classList.toggle('fit', state.fitMedia);
         } else if (event.key.toLowerCase() === 't') {
           state.hideTags = !state.hideTags;
           hideTagsToggle.checked = state.hideTags;
@@ -1584,7 +1587,7 @@ function renderApp(url) {
         state.incomingVideo = null;
         state.preloaded.forEach(releaseSlide);
         reelDetails.open = false;
-        reelDetails.hidden = true;
+        reelPostActions.hidden = true;
         postCredit.cancel();
         togglePlayback.disabled = true;
         clearTimers();
@@ -1834,20 +1837,6 @@ function renderApp(url) {
         await showPost(nextIndex, { immediate: options.immediate === true });
       }
 
-      function rerenderCurrentSlide() {
-        if (!state.posts.length) return;
-        const currentEntry = state.preloaded.get(state.currentIndex);
-        if (currentEntry) {
-          currentEntry.media.classList.toggle('fit', state.fitMedia);
-        }
-        if (state.currentSlide) {
-          const media = state.currentSlide.querySelector('.reel-media');
-          if (media) {
-            media.classList.toggle('fit', state.fitMedia);
-          }
-        }
-      }
-
       async function showPost(index, { immediate = false } = {}) {
         const post = state.posts[index];
         if (!post) return;
@@ -1902,7 +1891,7 @@ function renderApp(url) {
       function setCurrentSlide(slide, media) {
         state.currentSlide = slide;
         state.currentMedia = media;
-        reelDetails.hidden = false;
+        reelPostActions.hidden = false;
       }
 
       function ensureSlide(index) {
@@ -1969,12 +1958,15 @@ function renderApp(url) {
 
       function createSlide(post) {
         const slide = document.createElement('article');
-        slide.className = 'reel-slide loading';
+        slide.className = 'reel-slide loading' + (state.fitMedia ? ' fit' : '');
         const previewUrl = post.previewUrl === post.mediaUrl ? '' : post.previewUrl;
-        slide.style.setProperty('--preview-image', previewUrl ? 'url("' + previewUrl.replace(/"/g, '\\"') + '")' : 'none');
 
         const fallback = document.createElement('div');
         fallback.className = 'reel-media-fallback';
+        if (post.type === 'video' && post.width > 0 && post.height > 0) {
+          fallback.style.setProperty('--video-aspect', post.width / post.height);
+          fallback.style.setProperty('--preview-fit', 'cover');
+        }
         fallback.style.backgroundImage = previewUrl ? 'url("' + previewUrl.replace(/"/g, '\\"') + '")' : 'none';
         slide.appendChild(fallback);
 
@@ -2004,14 +1996,13 @@ function renderApp(url) {
         let media;
         if (post.type === 'video') {
           media = document.createElement('video');
-          if (previewUrl) media.poster = previewUrl;
           media.preload = 'none';
           media.playsInline = true;
           media.loop = false;
           media.muted = state.muted;
           media.controls = false;
           media.autoplay = false;
-          media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
+          media.className = 'reel-media';
           media.addEventListener('loadeddata', () => {
             slide.classList.remove('loading');
             if (state.currentMedia === media && !state.animationLock) prepareNeighbors();
@@ -2045,7 +2036,7 @@ function renderApp(url) {
           media.alt = post.description || 'e621 media post';
           media.loading = 'eager';
           media.decoding = 'async';
-          media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
+          media.className = 'reel-media';
           media.addEventListener('load', () => {
             slide.classList.remove('loading');
             if (state.currentMedia === media && !state.animationLock) {
@@ -2233,7 +2224,7 @@ function renderFeedFilterStyles() {
     .feed-filter-sheet label{display:grid;gap:5px;font-size:.88rem}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid #ffffff42;border-radius:10px;background:#0b0b10;color:#fff;padding:8px;font:inherit;font-size:1rem}
     .feed-filter-sheet label[for=feedTags]{margin-bottom:-8px}
     .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:#ff70aa;color:#170811;border-color:transparent}.feed-filter-sheet p{margin:0;color:#c4c2cb;font-size:.8rem}
-    .more-like-trigger{margin:0 10px 10px}.lightbox .more-like-trigger{margin:0 0 0 10px;pointer-events:auto}
+    .lightbox .more-like-trigger{margin-inline-start:10px;pointer-events:auto}
     .more-like-list{max-height:min(40dvh,20rem);min-width:0;overflow:auto;overscroll-behavior:contain;margin:0;padding:4px 8px;border:1px solid #ffffff30;border-radius:10px}
     .more-like-list legend{padding:0 5px;font-size:.85rem}.more-like-list label{display:flex;align-items:center;gap:9px;min-height:44px;overflow-wrap:anywhere;cursor:pointer}
     .more-like-list label:has(input:checked){color:#ffd0e4;background:#302030;border-radius:8px}.more-like-list small{margin-left:auto;color:#c4c2cb}
