@@ -4,10 +4,16 @@ import e621ClientSource from './client/e621-client.js';
 import photoFeedSource from './client/photo-feed.js';
 import feedFiltersSource from './client/feed-filters.js';
 
+import postCreditSource from './client/post-credit.js';
+
+import tagAutocompleteSource from './client/tag-autocomplete.js';
+
 const CLIENT_FILES = {
   'e621-client.js': e621ClientSource,
   'photo-feed.js': photoFeedSource,
   'feed-filters.js': feedFiltersSource,
+  'tag-autocomplete.js': tagAutocompleteSource,
+  'post-credit.js': postCreditSource,
 };
 
 // FNV-1a; only needs to change whenever any client file changes.

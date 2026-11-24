@@ -1,9 +1,12 @@
+import { bindTagAutocomplete } from './tag-autocomplete.js';
+
 // Shared filter sheet for the two feed pages.
 export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityChange = () => {} }) {
   const dialog = document.getElementById('feedFilters');
   const trigger = document.getElementById('openFeedFilters');
   const form = dialog.querySelector('form');
   const fields = form.elements;
+  const closeSuggestions = bindTagAutocomplete(fields.tags);
   let filters = { ...initial };
 
   function updateTrigger() {
@@ -21,6 +24,7 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     dialog.showModal();
     onVisibilityChange(true);
     dialog.addEventListener('close', () => {
+      closeSuggestions();
       (source.isConnected && !source.closest('[hidden]') ? source : trigger).focus({ preventScroll: true });
       onVisibilityChange(false);
     }, { once: true });
@@ -55,6 +59,7 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
   });
   form.addEventListener('reset', event => {
     event.preventDefault();
+    closeSuggestions();
     fields.tags.value = '';
     fields.rating.value = '';
     fields.sort.value = 'trending';

@@ -6,6 +6,7 @@ import {
   createRateLimiter,
   createResponseCache,
   fetchPostsPage,
+  fetchPostArtists,
   fetchTagSuggestions,
   mapPhotoPost,
   mapReelPost,
@@ -38,6 +39,32 @@ test('post pages accept the current e621 array and nested media fields', async (
   assert.deepEqual(photos.data.posts.map(({ id, fileUrl, sampleUrl, sampleWidth }) => ({ id, fileUrl, sampleUrl, sampleWidth })), [
     { id: 2, fileUrl: original.url, sampleUrl: sample.jpg, sampleWidth: 480 },
   ]);
+});
+
+test('artist credits resolve exact flat tags and reuse grouped credits', async () => {
+  const { client, calls } = scriptedClient({ responses: [jsonResponse([
+    { name: 'known_artist', category: 1 },
+    { name: 'fox', category: 5 },
+    { name: 'unrelated', category: 1 },
+  ])] });
+  assert.equal(await fetchPostArtists(client, { artistText: 'legacy_artist' }), 'legacy_artist');
+  assert.equal(calls.length, 0);
+  assert.equal(await fetchPostArtists(client, { artistTags: ['known_artist', 'fox', 'fox', 'unknown_artist'] }), 'known_artist');
+  const url = new URL(calls[0]);
+  assert.equal(url.pathname, '/tags.json');
+  assert.equal(url.searchParams.get('search[name]'), 'fox,known_artist');
+  assert.equal(url.searchParams.get('search[category]'), '1');
+  await fetchPostArtists(client, { artistTags: ['fox', 'known_artist'] });
+  assert.equal(calls.length, 1);
+});
+
+test('autocomplete handles a wrapped tag response and preserves alias metadata', async () => {
+  const { client } = scriptedClient({ responses: [jsonResponse({ tags: [
+    { name: 'tail', antecedent_name: 'wolf_tail', category: 0 },
+  ] })] });
+  const [tag] = await fetchTagSuggestions(client, 'wolf');
+  assert.equal(tag.name, 'tail');
+  assert.equal(tag.antecedentName, 'wolf_tail');
 });
 
 test('rate limiter spaces request starts at least intervalMs apart', async () => {

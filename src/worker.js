@@ -732,7 +732,7 @@ function renderApp(url) {
           <div class="bottom">
             <details id="reelDetails" hidden>
               <summary class="feed-control">Post details</summary>
-              <div class="meta" id="metaBlock"><div class="credit" id="postDescription">Artist: Unknown artist • <a id="openPostLink" href="https://e621.net" target="_blank" rel="noreferrer">View post</a></div></div>
+              <div class="meta" id="metaBlock"><div class="credit" id="postDescription"></div></div>
             </details>
             <div class="side-actions reel-controls">
               <button type="button" class="feed-control" id="togglePlayback" disabled>Pause</button>
@@ -772,6 +772,7 @@ function renderApp(url) {
       import { getBrowserClient, fetchPostsPage, fetchTagSuggestions, describeApiError, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';
 
       import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
+      import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
 
       const apiClient = getBrowserClient();
       const REEL_PAGE_SIZE = 24;
@@ -846,7 +847,7 @@ function renderApp(url) {
       const reelTrack = document.getElementById('reelTrack');
       const metaBlock = document.getElementById('metaBlock');
       const postTitle = document.getElementById('postTitle');
-      const postDescription = document.getElementById('postDescription');
+      const postCredit = bindPostCredit(document.getElementById('postDescription'), apiClient);
       const statusCard = document.getElementById('statusCard');
       const statusTitle = document.getElementById('statusTitle');
       const statusText = document.getElementById('statusText');
@@ -886,13 +887,16 @@ function renderApp(url) {
       });
       emptyReelFilters.addEventListener('click', () => feedFilters.open(emptyReelFilters));
       togglePlayback.addEventListener('click', toggleCurrentPlayback);
-      reelDetails.addEventListener('toggle', syncPlayback);
+      reelDetails.addEventListener('toggle', () => {
+        syncPlayback();
+        if (reelDetails.open) postCredit.resolve();
+        else postCredit.cancel();
+      });
       reelDetails.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape' || !reelDetails.open) return;
         reelDetails.open = false;
         reelDetails.querySelector('summary').focus();
       });
-      const openPostLink = document.getElementById('openPostLink');
       const modeSelect = document.getElementById('modeSelect');
       const tagsInput = document.getElementById('tagsInput');
       const ratingSelect = document.getElementById('ratingSelect');
@@ -1550,6 +1554,7 @@ function renderApp(url) {
         state.preloaded.forEach(({ media }) => media.pause?.());
         reelDetails.open = false;
         reelDetails.hidden = true;
+        postCredit.cancel();
         togglePlayback.disabled = true;
         clearTimers();
         state.posts = [];
@@ -1684,7 +1689,6 @@ function renderApp(url) {
         clearTimers();
         renderStatus(title, body, options);
         postTitle.textContent = title;
-        postDescription.textContent = body;
         tagList.innerHTML = '';
         counterBadge.textContent = '0 / 0';
         progressBar.style.width = '0%';
@@ -2033,17 +2037,10 @@ function renderApp(url) {
       }
 
       function updateMeta(post) {
-        postDescription.textContent = '';
-        const artistText = document.createTextNode((post.description.split(' • ')[0] || 'Artist: Unknown artist') + ' • ');
-        const viewLink = document.createElement('a');
-        viewLink.href = post.sourceUrl;
-        viewLink.target = '_blank';
-        viewLink.rel = 'noreferrer noopener';
-        viewLink.textContent = 'View post';
-        postDescription.append(artistText, viewLink);
+        postCredit.show(post);
+        if (reelDetails.open) postCredit.resolve();
         sortBadge.textContent = (state.mode === 'score' ? 'Top score' : 'Trending') + (state.lastFeedSource === 'client-direct' ? ' • Direct' : '');
         counterBadge.textContent = (state.currentIndex + 1) + ' / ' + state.posts.length;
-        openPostLink.href = post.sourceUrl;
         tagList.innerHTML = '';
 
         const tags = post.tags.length ? post.tags : ['No tags'];
@@ -2188,14 +2185,27 @@ function renderApp(url) {
 </html>`;
 }
 
+function renderTagSuggestionStyles() {
+  return `
+    .tag-suggestions{border:1px solid #ffffff35;border-radius:10px;background:#171721;color:#fff;overflow:hidden}
+    .tag-suggestions[hidden],.tag-suggestion-status:empty{display:none}
+    .tag-suggestions [role=listbox]{max-height:190px;overflow:auto;touch-action:pan-y}
+    .tag-suggestions [role=option]{min-height:44px;padding:8px 10px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;overflow-wrap:anywhere}
+    .tag-suggestions [role=option]:is(:hover,[aria-selected=true]){background:#303043}
+    .tag-suggestions small,.tag-suggestion-status{color:#c8c8d4}.tag-suggestion-status{padding:10px}
+  `;
+}
+
 function renderFeedFilterStyles() {
   return `
+    ${renderTagSuggestionStyles()}
     .feed-control{min-height:44px;padding:0 13px;border:1px solid #ffffff42;border-radius:12px;background:#16161e;color:#fff;font:600 .85rem system-ui;cursor:pointer}
     .feed-control:focus-visible,.feed-filter-sheet :is(input,select):focus-visible,.tile:focus-visible,#reelDetails summary:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
     .feed-filter-trigger{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 68px);z-index:60}
     .feed-filter-sheet{box-sizing:border-box;position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;max-height:90dvh;overflow:auto;color:#fff;background:#15151e;border:1px solid #ffffff30;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));touch-action:pan-y}
     .feed-filter-sheet::backdrop{background:#0009}.feed-filter-sheet form{display:grid;gap:12px}.feed-filter-sheet header,.feed-filter-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.feed-filter-sheet h2{margin:0;font-size:1.2rem}
     .feed-filter-sheet label{display:grid;gap:5px;font-size:.88rem}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid #ffffff42;border-radius:10px;background:#0b0b10;color:#fff;padding:8px;font:inherit;font-size:1rem}
+    .feed-filter-sheet label[for=feedTags]{margin-bottom:-8px}
     .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:#ff70aa;color:#170811;border-color:transparent}.feed-filter-sheet p{margin:0;color:#c4c2cb;font-size:.8rem}
     .media-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;padding:14px;border-radius:14px;background:#15151ef2;color:#fff;text-align:center;min-width:175px}.media-error p{margin:0 0 8px}.media-error[hidden]{display:none}
   `;
@@ -2205,7 +2215,7 @@ function renderFeedFilters() {
   return `<button type="button" class="feed-control feed-filter-trigger" id="openFeedFilters" aria-haspopup="dialog">Filters</button>
     <dialog class="feed-filter-sheet" id="feedFilters" aria-labelledby="feedFiltersTitle">
       <form><header><h2 id="feedFiltersTitle">Feed filters</h2><button type="button" class="feed-control" data-close-filters>Close</button></header>
-        <label>Tags<input name="tags" autocomplete="off" placeholder="Search by tags"/></label>
+        <label for="feedTags">Tags</label><div><input id="feedTags" name="tags" autocomplete="off" placeholder="Search by tags"/></div>
         <div class="feed-filter-row"><label>Rating<select name="rating"><option value="">Any rating</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label>
         <label>Sort<select name="sort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label></div>
         <label>Aspect ratio<select name="ratio"><option value="">Any ratio</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label>
@@ -2246,6 +2256,7 @@ function renderPhotoGridPage(url) {
 import { getBrowserClient, describeApiError } from '${clientAssetUrl('e621-client.js')}';
 import { createPhotoFeed, photoTagsFromSettings } from '${clientAssetUrl('photo-feed.js')}';
 import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
+import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
 
 const grid = document.getElementById('grid');
 const status = document.getElementById('status');
@@ -2306,6 +2317,7 @@ function mergeUrlParamsIntoSettings(settings, url) {
 const initialFilters = mergeUrlParamsIntoSettings(loadSettings(), new URL(window.location.href)).shared;
 let tags = photoTagsFromSettings(initialFilters);
 const client = getBrowserClient();
+const photoCredit = bindPostCredit(lightboxCredit, client);
 let feedAbort = new AbortController();
 let feed = makeFeed();
 const sentinel = document.createElement('div');
@@ -2608,17 +2620,6 @@ function buildLightboxSlide(post, isCurrent) {
   return slide;
 }
 
-function updateLightboxCredit(post) {
-  lightboxCredit.textContent = '';
-  const artist = document.createTextNode('Artist: ' + post.artistText + ' • ');
-  const link = document.createElement('a');
-  link.href = post.sourceUrl;
-  link.target = '_blank';
-  link.rel = 'noreferrer noopener';
-  link.textContent = 'View post';
-  lightboxCredit.append(artist, link);
-}
-
 function setLightboxTrack(offsetPx, animated) {
   lightboxTrack.classList.toggle('animating', Boolean(animated) && !reducedMotion.matches);
   lightboxTrack.style.transform = 'translate3d(' + offsetPx + 'px,0,0)';
@@ -2645,7 +2646,8 @@ function renderLightboxAt(index) {
   downHint.classList.toggle('show', current.height > current.width * 1.45);
   lightboxBaseX = currentBase();
   setLightboxTrack(lightboxBaseX, false);
-  updateLightboxCredit(current);
+  photoCredit.show(current);
+  photoCredit.resolve();
 }
 
 function openLightbox(index, tile) {
@@ -2659,6 +2661,7 @@ function openLightbox(index, tile) {
 }
 
 lightbox.addEventListener('close', () => {
+  photoCredit.cancel();
   cancelOriginal();
   clearTimeout(lightboxMoveTimer);
   lightboxMoveTimer = null;
@@ -2753,31 +2756,9 @@ pump();
 }
 
 function renderSettingsPage(url) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body.settings-page{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.settings-page .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.settings-page .fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.settings-page .fr-nav-fallback[hidden]{display:none}.settings-page .settings-shell{max-width:920px;margin:72px auto 20px;display:grid;gap:14px}.settings-page .settings-card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}.input-with-autocomplete{position:relative}.autocomplete{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:20;border:1px solid rgba(255,255,255,.2);border-radius:12px;background:#14141b;box-shadow:0 18px 48px rgba(0,0,0,.5);overflow:hidden}.autocomplete[hidden]{display:none}.autocomplete-list{display:grid;max-height:280px;overflow-y:auto}.autocomplete-option,.autocomplete-empty{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;width:100%;padding:10px 12px;border:0;border-top:1px solid rgba(255,255,255,.08);background:transparent;color:#fff;text-align:left;cursor:pointer;font:inherit}.autocomplete-option:first-child,.autocomplete-empty:first-child{border-top:0}.autocomplete-option.active,.autocomplete-option:hover,.autocomplete-option:focus-visible{background:rgba(255,255,255,.08);outline:none}.autocomplete-tag{overflow:hidden}.autocomplete-name{font-weight:600}.autocomplete-meta{font-size:.78rem;margin-top:2px;color:rgba(255,255,255,.6)}.autocomplete-empty{grid-template-columns:1fr;color:rgba(255,255,255,.6)}.autocomplete-category{width:10px;height:10px;border-radius:999px;background:#666}.autocomplete-category[data-category="0"]{background:#b9b9b9}.autocomplete-category[data-category="1"]{background:#e7c94e}.autocomplete-category[data-category="3"]{background:#53b45e}.autocomplete-category[data-category="4"]{background:#f28b51}.autocomplete-category[data-category="5"]{background:#5f9bff}.autocomplete-category[data-category="6"]{background:#b36df6}.autocomplete-count{font-size:.78rem;color:rgba(255,255,255,.6);white-space:nowrap}</style></head><body class="settings-page">${renderFloatingNav('settings')}<main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search and filters</h2><label>Tags/search query<div class="input-with-autocomplete"><input id="sharedTags" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="tagAutocompleteList" aria-autocomplete="list" placeholder="e.g. fox forest"/><div class="autocomplete" id="tagAutocomplete" hidden><div class="autocomplete-list" id="tagAutocompleteList" role="listbox"></div></div></div></label><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="settings-actions"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderFloatingNavScript()}</script><script type="module">import { getBrowserClient, fetchTagSuggestions, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';const apiClient=getBrowserClient();const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
-const tagsInput=q('sharedTags');
-const tagAutocomplete=q('tagAutocomplete');
-const tagAutocompleteList=q('tagAutocompleteList');
-const AUTOCOMPLETE_DEBOUNCE_MS=160;
-const tagAutocompleteState={items:[],activeIndex:-1,open:false,requestId:0,debounceTimer:null,abort:null};
-function getActiveTagToken(value){const normalized=String(value||'');if(/\\s$/.test(normalized))return '';const parts=normalized.split(/\\s+/);return sanitizeAutocompleteQuery(parts[parts.length-1]||'')}
-function replaceActiveTagToken(value,tagName){const normalized=String(value||'');const parts=normalized.split(/\\s+/).filter((part,index,array)=>part||index<array.length-1);if(!parts.length||/\\s$/.test(normalized)){return (normalized.trim()?normalized.trim()+' ':'')+tagName+' '}parts[parts.length-1]=tagName;return parts.join(' ')+' '}
-function categoryLabel(category){const labels={0:'General',1:'Artist',3:'Copyright',4:'Character',5:'Species',6:'Invalid'};return labels[category]||'Tag'}
-function formatPostCount(count){return Number(count||0).toLocaleString()}
-function scheduleTagAutocomplete(runImmediately){if(tagAutocompleteState.debounceTimer){clearTimeout(tagAutocompleteState.debounceTimer);tagAutocompleteState.debounceTimer=null}if(runImmediately){updateTagAutocomplete();return}tagAutocompleteState.debounceTimer=setTimeout(updateTagAutocomplete,AUTOCOMPLETE_DEBOUNCE_MS)}
-async function updateTagAutocomplete(){const token=getActiveTagToken(tagsInput.value);if(!token){closeTagAutocomplete();return}const requestId=++tagAutocompleteState.requestId;if(tagAutocompleteState.abort)tagAutocompleteState.abort.abort();const controller=new AbortController();tagAutocompleteState.abort=controller;try{const items=await fetchTagSuggestions(apiClient,token,{signal:controller.signal});if(requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=items;tagAutocompleteState.activeIndex=items.length?0:-1;renderTagAutocomplete()}catch(error){if(isAbortError(error)||requestId!==tagAutocompleteState.requestId)return;tagAutocompleteState.items=[];tagAutocompleteState.activeIndex=-1;renderTagAutocomplete('Could not load tag suggestions right now.')}}
-function renderTagAutocomplete(emptyMessage){tagAutocompleteList.innerHTML='';const hasItems=tagAutocompleteState.items.length>0;if(!hasItems){if(!emptyMessage){closeTagAutocomplete();return}const empty=document.createElement('div');empty.className='autocomplete-empty';empty.textContent=emptyMessage;tagAutocompleteList.appendChild(empty)}else{tagAutocompleteState.items.forEach((item,index)=>{const button=document.createElement('button');button.type='button';button.className='autocomplete-option'+(index===tagAutocompleteState.activeIndex?' active':'');button.setAttribute('data-tag-name',item.name);button.setAttribute('role','option');button.setAttribute('aria-selected',index===tagAutocompleteState.activeIndex?'true':'false');const category=document.createElement('span');category.className='autocomplete-category';if(item.category!==null&&item.category!==undefined)category.setAttribute('data-category',String(item.category));const tag=document.createElement('span');tag.className='autocomplete-tag';const name=document.createElement('div');name.className='autocomplete-name';name.textContent=item.name.replaceAll('_',' ');const meta=document.createElement('div');meta.className='autocomplete-meta';meta.textContent=item.antecedentName?'Alias of '+item.antecedentName.replaceAll('_',' '):categoryLabel(item.category);tag.appendChild(name);tag.appendChild(meta);const count=document.createElement('span');count.className='autocomplete-count';count.textContent=formatPostCount(item.postCount);button.appendChild(category);button.appendChild(tag);button.appendChild(count);tagAutocompleteList.appendChild(button)})}tagAutocompleteState.open=true;tagAutocomplete.hidden=false;tagsInput.setAttribute('aria-expanded','true')}
-function closeTagAutocomplete(){tagAutocompleteState.items=[];tagAutocompleteState.activeIndex=-1;tagAutocompleteState.open=false;tagAutocomplete.hidden=true;tagsInput.setAttribute('aria-expanded','false');tagAutocompleteList.innerHTML=''}
-function applyAutocompleteTag(tagName){tagsInput.value=replaceActiveTagToken(tagsInput.value,tagName);tagsInput.focus();closeTagAutocomplete()}
-function moveAutocompleteSelection(direction){if(!tagAutocompleteState.items.length)return;const count=tagAutocompleteState.items.length;tagAutocompleteState.activeIndex=(tagAutocompleteState.activeIndex+direction+count)%count;renderTagAutocomplete()}
-function handleAutocompleteKeydown(event){if(!tagAutocompleteState.open&&event.key!=='Tab')return;if(event.key==='ArrowDown'){event.preventDefault();moveAutocompleteSelection(1)}else if(event.key==='ArrowUp'){event.preventDefault();moveAutocompleteSelection(-1)}else if(event.key==='Enter'||event.key==='Tab'){if(tagAutocompleteState.open&&tagAutocompleteState.activeIndex>=0){if(event.key==='Enter')event.preventDefault();const active=tagAutocompleteState.items[tagAutocompleteState.activeIndex];if(active)applyAutocompleteTag(active.name)}}else if(event.key==='Escape'){closeTagAutocomplete()}}
-tagsInput.addEventListener('input',()=>scheduleTagAutocomplete(false));
-tagsInput.addEventListener('focus',()=>scheduleTagAutocomplete(true));
-tagsInput.addEventListener('blur',()=>{setTimeout(()=>{if(!tagAutocomplete.contains(document.activeElement))closeTagAutocomplete()},120)});
-tagsInput.addEventListener('keydown',handleAutocompleteKeydown);
-tagAutocomplete.addEventListener('mousedown',(event)=>event.preventDefault());
-tagAutocomplete.addEventListener('click',(event)=>{const option=event.target.closest('.autocomplete-option');if(!option)return;applyAutocompleteTag(option.getAttribute('data-tag-name'))});
-document.addEventListener('click',(event)=>{if(!tagAutocomplete.contains(event.target)&&event.target!==tagsInput)closeTagAutocomplete()});
-q('resetShared').onclick=()=>{resetSharedSettings(settings);bind()};q('resetReels').onclick=()=>{resetReelsSettings(settings);bind()};q('resetPhotos').onclick=()=>{resetPhotosSettings(settings);bind()};q('resetOnboarding').onclick=()=>{settings.reels.onboardingSeen=false;saveSettings(settings)};q('settingsForm').addEventListener('submit',(e)=>{e.preventDefault();settings.shared.tags=q('sharedTags').value.trim();settings.shared.sort=q('sharedSort').value;settings.shared.rating=q('sharedRating').value;settings.shared.ratio=q('sharedRatio').value;settings.shared.excludeTags=q('sharedExclude').value.trim();settings.reels.fitMedia=q('reelsFit').value==='contain';settings.reels.muted=q('reelsMute').value==='true';settings.photos.gridDensity=q('photosDensity').value;settings.photos.fitImages=q('photosFit').value;settings.shared.syncUrl=q('syncUrl').checked;saveSettings(settings);const from=new URLSearchParams(location.search).get('from');if(from==='photos'){location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/photos'):'/photos';return;}location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/'):'/';});</script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body.settings-page{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.settings-page .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.settings-page .fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.settings-page .fr-nav-fallback[hidden]{display:none}.settings-page .settings-shell{max-width:920px;margin:72px auto 20px;display:grid;gap:14px}.settings-page .settings-card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}${renderTagSuggestionStyles()}</style></head><body class="settings-page">${renderFloatingNav('settings')}<main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search and filters</h2><label for="sharedTags">Tags/search query</label><div><input id="sharedTags" autocomplete="off" placeholder="e.g. fox forest"/></div><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="settings-actions"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderFloatingNavScript()}</script><script type="module">import { bindTagAutocomplete } from '${clientAssetUrl('tag-autocomplete.js')}';const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
+const closeTagSuggestions = bindTagAutocomplete(q('sharedTags'));
+q('resetShared').onclick=()=>{closeTagSuggestions();resetSharedSettings(settings);bind()};q('resetReels').onclick=()=>{resetReelsSettings(settings);bind()};q('resetPhotos').onclick=()=>{resetPhotosSettings(settings);bind()};q('resetOnboarding').onclick=()=>{settings.reels.onboardingSeen=false;saveSettings(settings)};q('settingsForm').addEventListener('submit',(e)=>{e.preventDefault();settings.shared.tags=q('sharedTags').value.trim();settings.shared.sort=q('sharedSort').value;settings.shared.rating=q('sharedRating').value;settings.shared.ratio=q('sharedRatio').value;settings.shared.excludeTags=q('sharedExclude').value.trim();settings.reels.fitMedia=q('reelsFit').value==='contain';settings.reels.muted=q('reelsMute').value==='true';settings.photos.gridDensity=q('photosDensity').value;settings.photos.fitImages=q('photosFit').value;settings.shared.syncUrl=q('syncUrl').checked;saveSettings(settings);const from=new URLSearchParams(location.search).get('from');if(from==='photos'){location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/photos'):'/photos';return;}location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/'):'/';});</script></body></html>`;
 }
 
 function renderAboutPage() {

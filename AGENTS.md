@@ -333,3 +333,8 @@ When making changes in this repository, append entries to this file so the next 
 - Added a shared feed filter dialog for tags, rating, sort, and ratio. Applying a changed filter restarts the active feed in place, empty states link to the dialog, and URL sharing follows the existing setting.
 - Added tap and keyboard playback, saved mute preference, interaction-triggered progress, and per-reel recovery. Opening post details or filters and dragging to seek suspend playback.
 - Made the photo grid keyboard-operable and the lightbox modal, with explicit navigation, scrollable tall images, per-photo recovery, and focus restoration on close. Both viewers honor reduced motion during navigation.
+
+## 2026-11-24 — Restore artist credits and tag suggestions
+
+- Verified that e621 returns uncategorized post tags and supports exact-name searches filtered to the artist category. Reels details and the photo lightbox resolve credits on demand through the existing rate-limited browser client.
+- Added the same debounced, keyboard-operable tag suggestions to Reels, Photos, and Settings. Suggestions replace the token at the cursor, preserve a leading minus, and use the canonical tag for aliases.

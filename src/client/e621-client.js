@@ -513,7 +513,8 @@ export function mapPhotoPost(rawPost) {
     height: post.file.height || 0,
     sampleWidth: (sampleUrl && post.sample.width) || 0,
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
-    artistText: artists.length ? artists.join(', ') : 'Unknown artist',
+    artistText: artists.join(', '),
+    artistTags: Array.isArray(post.tags) ? post.tags : [],
   };
 }
 
@@ -537,12 +538,59 @@ export function mapReelPost(rawPost) {
     mediaUrl: post.file.url,
     previewUrl: (post.preview && post.preview.url) || (post.sample && post.sample.url) || post.file.url,
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
+    artistText: artist.join(', '),
+    artistTags: Array.isArray(post.tags) ? post.tags : [],
     description: [
       artist.length ? 'Artist: ' + artist.join(', ') : 'Artist unknown',
       species.length ? 'Species: ' + species.slice(0, 3).join(', ') : null,
     ].filter(Boolean).join(' • '),
     tags: artist.map((tag) => 'artist:' + tag).concat(general),
   };
+}
+
+// The current post response flattens tag categories. Resolve credits by exact tag name
+// and category on demand, using the same cache and throttling as other e621 calls.
+export async function fetchPostArtists(client, post, { signal } = {}) {
+  if (post.artistText) return post.artistText;
+  const tags = [...new Set((post.artistTags || []).filter(tag =>
+    typeof tag === 'string' && tag.length && !tag.includes(',') && tag !== 'unknown_artist'
+  ))].sort();
+  const artists = [];
+  let batch = [];
+  let size = 0;
+
+  async function lookup(names) {
+    const url = new URL('/tags.json', E621_ORIGIN);
+    url.searchParams.set('search[name]', names.join(','));
+    url.searchParams.set('search[category]', '1');
+    url.searchParams.set('limit', String(names.length));
+    url.searchParams.set('_client', CLIENT_NAME);
+    const { data } = await client.getJson(url.toString(), {
+      label: 'artist-credit',
+      ttlMs: 60 * 60 * 1000,
+      timeoutMs: 5000,
+      maxAttempts: 2,
+      signal,
+      validate: payload => Array.isArray(payload) || Array.isArray(payload?.tags),
+      transform: payload => (Array.isArray(payload) ? payload : payload.tags)
+        .filter(tag => tag?.category === 1 && names.includes(tag.name))
+        .map(tag => tag.name),
+    });
+    artists.push(...data);
+  }
+
+  for (const tag of tags) {
+    const length = new URLSearchParams({ tag }).toString().length;
+    if (batch.length && (size + length > 3000 || batch.length === 320)) {
+      await lookup(batch);
+      batch = [];
+      size = 0;
+    }
+    batch.push(tag);
+    size += length;
+  }
+  if (batch.length) await lookup(batch);
+  return artists.sort().join(', ');
 }
 
 export function mapAutocompleteTags(payload, limit = AUTOCOMPLETE_LIMIT) {
@@ -569,7 +617,7 @@ export function fetchPostsPage(client, { view, tags, page, limit, signal, onStat
   const url = buildPostsUrl({ tags, page, limit });
   return client.getJson(url, {
     label: view + ':page-' + page,
-    cacheKey: view + '|' + url,
+    cacheKey: 'post-v2|' + view + '|' + url,
     ttlMs: POSTS_TTL_MS,
     staleTtlMs: POSTS_STALE_TTL_MS,
     validate: hasPostsArray,
@@ -584,7 +632,7 @@ export function fetchPostsPage(client, { view, tags, page, limit, signal, onStat
 }
 
 export function peekPostsPage(client, { view, tags, page, limit }) {
-  return client.peek(view + '|' + buildPostsUrl({ tags, page, limit }));
+  return client.peek('post-v2|' + view + '|' + buildPostsUrl({ tags, page, limit }));
 }
 
 export async function fetchTagSuggestions(client, rawQuery, { signal } = {}) {
@@ -595,8 +643,8 @@ export async function fetchTagSuggestions(client, rawQuery, { signal } = {}) {
     ttlMs: 60 * 60 * 1000,
     timeoutMs: 5000,
     maxAttempts: 2,
-    validate: (payload) => Array.isArray(payload) || (Boolean(payload) && typeof payload === 'object'),
-    transform: (payload) => mapAutocompleteTags(payload),
+    validate: payload => Array.isArray(payload) || Array.isArray(payload?.tags),
+    transform: payload => mapAutocompleteTags(Array.isArray(payload) ? payload : payload.tags),
     signal,
   });
   return data;
