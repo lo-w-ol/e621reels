@@ -338,3 +338,9 @@ When making changes in this repository, append entries to this file so the next 
 
 - Verified that e621 returns uncategorized post tags and supports exact-name searches filtered to the artist category. Reels details and the photo lightbox resolve credits on demand through the existing rate-limited browser client.
 - Added the same debounced, keyboard-operable tag suggestions to Reels, Photos, and Settings. Suggestions replace the token at the cursor, preserve a leading minus, and use the canonical tag for aliases.
+
+## 2026-11-24 — Smooth the reel snap and prioritize nearby media
+
+- Keep the current and adjacent slides mounted. Give the active reel priority and warm the next likely reel once the active frame is ready. Leave speculative media loading off on Save-Data and 2G connections.
+- Start an incoming video muted while a committed snap is moving. Keep its playback position on arrival and restore the viewer's mute preference only once it is active. Keep paused and reduced-motion navigation free of preview playback.
+- Reuse an in-flight page request at the feed boundary, deduplicate posts, and stop prefetching after the final page.

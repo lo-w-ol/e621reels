@@ -383,6 +383,7 @@ function renderApp(url) {
       #reelDetails .credit{border:0;background:none;border-radius:0;padding:4px 11px 12px;overflow-wrap:anywhere}
       .overlay > .bottom{grid-row:2;pointer-events:none}.bottom > :is(details,.reel-controls){pointer-events:auto}
       .reel-controls{margin-inline-start:auto;align-self:end}.reel-controls button{min-width:44px;min-height:44px}.reel-controls button:disabled{opacity:.5;cursor:default}
+      .reel-slide[inert] .load-indicator{opacity:0}
       .reel-slide.failed .reel-media-fallback{opacity:.6}
       .reel-slide.failed .load-indicator,.reel-slide.failed .reel-media,.reel-slide.loading .reel-media{visibility:hidden}
       @media(prefers-reduced-motion:reduce){.reel-track.animating,.scrub-hud,.reel-progress{transition:none}.load-indicator-dot{animation:none}}
@@ -781,7 +782,7 @@ function renderApp(url) {
       const DRAG_LOCK_THRESHOLD = 12;
       const TAP_DISTANCE_THRESHOLD = 10;
       const WHEEL_THRESHOLD = 8;
-      const PRELOAD_DISTANCE = 2;
+      const PAGE_LOOKAHEAD = 5;
       const IMAGE_COUNTDOWN_MS = 10000;
       const MIN_VIDEO_PLAYBACK_MS = 10000;
       const TRACK_TRANSITION_MS = 320;
@@ -798,6 +799,9 @@ function renderApp(url) {
         posts: [],
         currentIndex: 0,
         nextPage: 1,
+        pageLoad: null,
+        endOfFeed: false,
+        postIds: new Set(),
         loading: false,
         feedGeneration: 0,
         feedAbort: null,
@@ -813,6 +817,8 @@ function renderApp(url) {
         imageElapsed: 0,
         imageStartedAt: null,
         animationLock: false,
+        incomingVideo: null,
+        warmDirection: 1,
         fitMedia: bootSettings.reels.fitMedia !== false,
         hideTags: true,
         touchActive: false,
@@ -1009,11 +1015,6 @@ function renderApp(url) {
       previousButton.addEventListener('click', () => goToRelativePost(-1));
       toggleMuteButton.addEventListener('click', () => {
         state.muted = !state.muted;
-        state.preloaded.forEach((entry) => {
-          if (entry.media && entry.media.tagName === 'VIDEO') {
-            entry.media.muted = state.muted;
-          }
-        });
         if (state.currentMedia && state.currentMedia.tagName === 'VIDEO') {
           state.currentMedia.muted = state.muted;
         }
@@ -1360,9 +1361,16 @@ function renderApp(url) {
       }
 
       function updateTrackForDrag(deltaY) {
-        refreshTrackSlides();
-        reelTrack.style.transform = 'translate3d(0, ' + deltaY + 'px, 0)';
-        ensureAdjacentSlides();
+        const direction = deltaY < 0 ? 1 : -1;
+        if (direction !== state.warmDirection && Math.abs(deltaY) >= DRAG_LOCK_THRESHOLD) {
+          state.warmDirection = direction;
+          prepareNeighbors();
+        }
+        if (reducedMotion.matches) return;
+        const height = viewport.clientHeight;
+        const offset = Math.max(-height, Math.min(height, deltaY));
+        const atEdge = !state.posts[state.currentIndex + direction];
+        reelTrack.style.transform = 'translate3d(0, ' + (atEdge ? offset * 0.3 : offset) + 'px, 0)';
       }
 
       function finalizeSwipe(deltaY, hasDragged = true) {
@@ -1550,16 +1558,21 @@ function renderApp(url) {
         state.feedGeneration += 1;
         state.navigationToken += 1;
         state.animationLock = false;
-        state.currentMedia?.pause?.();
-        state.preloaded.forEach(({ media }) => media.pause?.());
+        state.incomingVideo = null;
+        state.preloaded.forEach(releaseSlide);
         reelDetails.open = false;
         reelDetails.hidden = true;
         postCredit.cancel();
         togglePlayback.disabled = true;
         clearTimers();
+        const generation = state.feedGeneration;
         state.posts = [];
+        state.postIds.clear();
         state.currentIndex = 0;
         state.nextPage = 1;
+        state.pageLoad = null;
+        state.endOfFeed = false;
+        state.warmDirection = 1;
         state.currentMedia = null;
         state.currentSlide = null;
         state.preloaded.clear();
@@ -1567,6 +1580,21 @@ function renderApp(url) {
         reelTrack.style.transform = 'translate3d(0, 0, 0)';
         renderStatus('Loading feed…', 'Pulling fresh posts from e621.');
         await loadPosts(true);
+        if (generation === state.feedGeneration && state.posts.length) maybePreloadPage();
+      }
+
+      function loadMore() {
+        if (state.pageLoad) return state.pageLoad;
+        if (state.loading || state.endOfFeed) return Promise.resolve();
+        const pending = loadPosts().finally(() => {
+          if (state.pageLoad === pending) state.pageLoad = null;
+        });
+        state.pageLoad = pending;
+        return pending;
+      }
+
+      function maybePreloadPage() {
+        if (state.posts.length - state.currentIndex <= PAGE_LOOKAHEAD) loadMore();
       }
 
       // A restart (replace) supersedes any in-flight page: the old request is aborted and its late result
@@ -1603,15 +1631,13 @@ function renderApp(url) {
             },
           });
           if (generation !== state.feedGeneration) return;
-          const incoming = data.posts;
           state.lastFeedSource = 'client-direct';
-
-          if (replace) {
-            state.posts = incoming;
-            state.currentIndex = 0;
-          } else {
-            state.posts.push(...incoming);
+          for (const post of data.posts) {
+            if (state.postIds.has(post.id)) continue;
+            state.postIds.add(post.id);
+            state.posts.push(post);
           }
+          state.endOfFeed = data.rawCount < REEL_PAGE_SIZE;
           state.nextPage += 1;
 
           if (!state.posts.length) {
@@ -1622,10 +1648,14 @@ function renderApp(url) {
           if (replace || !state.currentSlide) {
             await showPost(state.currentIndex, { immediate: true });
           } else {
-            schedulePreloadAroundIndex(state.currentIndex);
+            prepareNeighbors();
           }
         } catch (error) {
           if (isAbortError(error) || generation !== state.feedGeneration) return;
+          if (error.status === 410 && !replace) {
+            state.endOfFeed = true;
+            return;
+          }
           console.error('[feed] request failed', { kind: error.kind, status: error.status });
           // A failed "load more" keeps the reel that is playing; the next swipe near the end tries again.
           if (state.posts.length && !replace) return;
@@ -1731,7 +1761,7 @@ function renderApp(url) {
 
       function toggleCurrentPlayback() {
         const media = state.currentMedia;
-        if (!media || togglePlayback.disabled) return;
+        if (!media || togglePlayback.disabled || state.animationLock) return;
         state.paused = media.tagName === 'VIDEO' ? !media.paused : !state.paused;
         revealProgress();
         syncPlayback();
@@ -1740,7 +1770,8 @@ function renderApp(url) {
       function syncPlayback() {
         const media = state.currentMedia;
         if (!media) return;
-        const blocked = playbackBlocked() || state.currentSlide.classList.contains('failed');
+        if (playbackBlocked()) state.incomingVideo?.pause();
+        const blocked = state.animationLock || playbackBlocked() || state.currentSlide.classList.contains('failed');
         if (media.tagName === 'VIDEO') {
           if (blocked) media.pause();
           else if (media.paused) media.play().catch(updatePlaybackButton);
@@ -1786,16 +1817,16 @@ function renderApp(url) {
         }
 
         if (nextIndex >= state.posts.length) {
-          if (!state.loading) {
-            await loadPosts(false);
-          }
+          const navigationToken = state.navigationToken;
+          await loadMore();
+          if (navigationToken !== state.navigationToken || state.animationLock) return;
           if (nextIndex >= state.posts.length) {
             animateTrackTo(0);
             return;
           }
         }
 
-        await showPost(nextIndex, { immediate: options.immediate === true, direction: Math.sign(offset) || 1 });
+        await showPost(nextIndex, { immediate: options.immediate === true });
       }
 
       function rerenderCurrentSlide() {
@@ -1812,70 +1843,51 @@ function renderApp(url) {
         }
       }
 
-      async function showPost(index, options = {}) {
+      async function showPost(index, { immediate = false } = {}) {
         const post = state.posts[index];
         if (!post) return;
 
         const navigationToken = ++state.navigationToken;
+        const direction = Math.sign(index - state.currentIndex);
+        const entry = ensureSlide(index);
+        startMediaLoad(entry, 'high');
         hideStatus();
-        const previousIndex = state.currentIndex;
-        const direction = index > previousIndex ? 1 : index < previousIndex ? -1 : 0;
-        const movement = options.immediate || direction === 0 ? 0 : direction;
+        const animate = state.currentSlide && !immediate && direction !== 0 && !reducedMotion.matches;
 
-        if (!state.currentSlide || options.immediate) {
-          const entry = await ensureSlide(index);
-          if (navigationToken !== state.navigationToken) return;
-          state.currentIndex = index;
-          setCurrentSlide(entry.slide, entry.media);
+        if (animate) {
+          state.animationLock = true;
+          clearTimers(false);
+          state.currentMedia?.pause?.();
           refreshTrackSlides();
-          updateMeta(post);
-          startPlaybackForPost(post, entry.media);
-          ensureAdjacentSlides();
-          schedulePreloadAroundIndex(index);
-          if (state.posts.length - index <= 4) {
-            loadPosts(false);
-          }
-          animateTrackTo(0, false);
-          return;
+          startIncomingVideo(entry);
+          const trackTarget = -direction * viewport.clientHeight;
+          await animateTrackTo(trackTarget);
+          if (navigationToken !== state.navigationToken) return;
         }
 
-        state.animationLock = true;
-        clearTimers(direction === 0);
+        const alreadyStarted = state.incomingVideo === entry.media;
+        state.incomingVideo = null;
+        state.animationLock = false;
+        state.currentMedia?.pause?.();
+        state.currentIndex = index;
+        if (direction) state.warmDirection = direction;
+        setCurrentSlide(entry.slide, entry.media);
+        animateTrackTo(0, false);
+        prepareNeighbors();
+        updateMeta(post);
+        startPlaybackForPost(post, entry.media, alreadyStarted);
+        maybePreloadPage();
+      }
 
-        try {
-          const currentMedia = state.currentMedia;
-          const targetEntry = await ensureSlide(index);
-          if (navigationToken !== state.navigationToken) return;
-
-          if (currentMedia && currentMedia.tagName === 'VIDEO') {
-            currentMedia.pause();
-          }
-
-          refreshTrackSlides();
-          ensureAdjacentSlides();
-          schedulePreloadAroundIndex(index);
-
-          const trackTarget = movement > 0 ? -viewport.clientHeight : viewport.clientHeight;
-          await animateTrackTo(trackTarget, true);
-          if (navigationToken !== state.navigationToken) return;
-          reelTrack.classList.remove('animating');
-          reelTrack.style.transform = 'translate3d(0, 0, 0)';
-
-          state.currentIndex = index;
-          setCurrentSlide(targetEntry.slide, targetEntry.media);
-          refreshTrackSlides();
-          updateMeta(post);
-          ensureAdjacentSlides();
-          startPlaybackForPost(post, targetEntry.media);
-
-          if (state.posts.length - index <= 4) {
-            loadPosts(false);
-          }
-        } finally {
-          if (navigationToken === state.navigationToken) {
-            state.animationLock = false;
-          }
-        }
+      // Only a committed transition may roll the incoming video, and audio begins after the snap.
+      function startIncomingVideo({ media, slide }) {
+        if (media.tagName !== 'VIDEO' || playbackBlocked() || slide.classList.contains('failed')) return;
+        state.incomingVideo = media;
+        if (media.readyState) media.currentTime = 0;
+        media.muted = true;
+        media.play().catch(() => {
+          if (state.currentMedia === media) updatePlaybackButton();
+        });
       }
 
       function positionSlide(slide, offsetPercent) {
@@ -1888,16 +1900,51 @@ function renderApp(url) {
         reelDetails.hidden = false;
       }
 
-      // Registers the slide synchronously: with an await before preloaded.set(), two callers in the same
-      // tick each created a <video> and downloaded the same file twice.
-      async function ensureSlide(index) {
-        if (state.preloaded.has(index)) {
-          return state.preloaded.get(index);
+      function ensureSlide(index) {
+        if (!state.preloaded.has(index)) state.preloaded.set(index, createSlide(state.posts[index]));
+        return state.preloaded.get(index);
+      }
+
+      function startMediaLoad({ media, post }, priority) {
+        if (media.tagName === 'VIDEO') media.preload = 'auto';
+        else media.fetchPriority = priority;
+        if (!media.hasAttribute('src')) media.src = post.mediaUrl;
+      }
+
+      function releaseSlide({ media, slide }) {
+        slide.remove();
+        if (media.tagName === 'VIDEO') {
+          media.pause();
+          media.removeAttribute('src');
+          media.load();
+        } else {
+          media.removeAttribute('src');
         }
-        const entry = createSlide(state.posts[index]);
-        state.preloaded.set(index, entry);
-        prunePreloaded(index);
-        return entry;
+      }
+
+      function prepareNeighbors() {
+        if (!state.currentMedia) return;
+        const index = state.currentIndex;
+        for (const [key, entry] of state.preloaded) {
+          if (Math.abs(key - index) <= 1) continue;
+          releaseSlide(entry);
+          state.preloaded.delete(key);
+        }
+
+        const preferred = index + state.warmDirection;
+        const alternate = index - state.warmDirection;
+        for (const adjacent of [preferred, alternate]) {
+          if (state.posts[adjacent]) ensureSlide(adjacent);
+        }
+        refreshTrackSlides();
+
+        const connection = navigator.connection;
+        if (connection?.saveData || ['slow-2g', '2g'].includes(connection?.effectiveType)) return;
+        const current = state.currentMedia;
+        const ready = current.tagName === 'VIDEO' ? current.readyState >= 2 : current.complete && current.naturalWidth;
+        if (!ready && !state.currentSlide.classList.contains('failed')) return;
+        const upcoming = state.preloaded.get(preferred) || state.preloaded.get(alternate);
+        if (upcoming) startMediaLoad(upcoming, 'low');
       }
 
       function refreshTrackSlides() {
@@ -1915,31 +1962,15 @@ function renderApp(url) {
         }
       }
 
-      function prunePreloaded(centerIndex) {
-        const allowed = new Set();
-        for (let offset = -PRELOAD_DISTANCE; offset <= PRELOAD_DISTANCE; offset += 1) {
-          allowed.add(centerIndex + offset);
-        }
-        Array.from(state.preloaded.keys()).forEach((key) => {
-          if (key === state.currentIndex || allowed.has(key)) return;
-          const entry = state.preloaded.get(key);
-          if (entry && entry.media && entry.media.tagName === 'VIDEO') {
-            entry.media.pause();
-            entry.media.removeAttribute('src');
-            entry.media.load();
-          }
-          state.preloaded.delete(key);
-        });
-      }
-
       function createSlide(post) {
         const slide = document.createElement('article');
         slide.className = 'reel-slide loading';
-        slide.style.setProperty('--preview-image', post.previewUrl ? 'url("' + post.previewUrl.replace(/"/g, '\\"') + '")' : 'none');
+        const previewUrl = post.previewUrl === post.mediaUrl ? '' : post.previewUrl;
+        slide.style.setProperty('--preview-image', previewUrl ? 'url("' + previewUrl.replace(/"/g, '\\"') + '")' : 'none');
 
         const fallback = document.createElement('div');
         fallback.className = 'reel-media-fallback';
-        fallback.style.backgroundImage = post.previewUrl ? 'url("' + post.previewUrl.replace(/"/g, '\\"') + '")' : 'none';
+        fallback.style.backgroundImage = previewUrl ? 'url("' + previewUrl.replace(/"/g, '\\"') + '")' : 'none';
         slide.appendChild(fallback);
 
         const loadIndicator = document.createElement('div');
@@ -1968,32 +1999,36 @@ function renderApp(url) {
         let media;
         if (post.type === 'video') {
           media = document.createElement('video');
-          media.src = post.mediaUrl;
-          media.poster = post.previewUrl;
-          media.preload = 'metadata';
+          if (previewUrl) media.poster = previewUrl;
+          media.preload = 'none';
           media.playsInline = true;
           media.loop = false;
           media.muted = state.muted;
           media.controls = false;
           media.autoplay = false;
           media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
-          media.addEventListener('loadeddata', () => slide.classList.remove('loading'));
+          media.addEventListener('loadeddata', () => {
+            slide.classList.remove('loading');
+            if (state.currentMedia === media && !state.animationLock) prepareNeighbors();
+          });
           media.addEventListener('loadedmetadata', () => initializeVideoPlayback(media));
           media.addEventListener('ended', () => {
             handleVideoEnded(media);
           });
           media.addEventListener('play', () => {
-            markVideoPlaybackStarted(media);
             if (state.currentMedia === media) {
-              if (playbackBlocked()) media.pause();
-              else watchVideoProgress(media);
+              if (state.animationLock || playbackBlocked()) media.pause();
+              else {
+                markVideoPlaybackStarted(media);
+                watchVideoProgress(media);
+              }
               updatePlaybackButton();
             }
             slide.classList.remove('awaiting-play');
           });
           media.addEventListener('pause', () => {
             finalizeVideoPlaybackChunk(media);
-            if (state.currentMedia === media && !media.ended) {
+            if (state.currentMedia === media && !media.ended && !state.animationLock) {
               clearTimers(false);
               updatePlaybackButton();
             }
@@ -2002,36 +2037,46 @@ function renderApp(url) {
           media.addEventListener('playing', () => slide.classList.remove('awaiting-play'));
         } else {
           media = document.createElement('img');
-          media.src = post.mediaUrl;
           media.alt = post.description || 'e621 media post';
           media.loading = 'eager';
           media.decoding = 'async';
           media.className = 'reel-media' + (state.fitMedia ? ' fit' : '');
           media.addEventListener('load', () => {
             slide.classList.remove('loading');
-            if (state.currentMedia === media) syncPlayback();
+            if (state.currentMedia === media && !state.animationLock) {
+              prepareNeighbors();
+              syncPlayback();
+            }
           });
         }
 
         media.addEventListener('error', () => {
+          if (!media.hasAttribute('src')) return;
           slide.classList.add('failed');
           slide.classList.remove('loading', 'awaiting-play');
           failure.hidden = false;
-          if (state.currentMedia === media) syncPlayback();
+          if (state.currentMedia === media && !state.animationLock) {
+            prepareNeighbors();
+            syncPlayback();
+          }
         });
 
         slide.appendChild(media);
         return { slide, media, post };
       }
 
-      function startPlaybackForPost(post, media) {
+      function startPlaybackForPost(post, media, alreadyStarted) {
         state.imageElapsed = 0;
         state.imageStartedAt = null;
         clearTimers();
         if (post.type === 'video') {
           resetVideoPlayback(media);
-          if (media.readyState) media.currentTime = 0;
+          if (!alreadyStarted && media.readyState) media.currentTime = 0;
           media.muted = state.muted;
+          if (!media.paused && !playbackBlocked()) {
+            markVideoPlaybackStarted(media);
+            watchVideoProgress(media);
+          }
         }
         syncPlayback();
       }
@@ -2055,30 +2100,6 @@ function renderApp(url) {
         });
       }
 
-      function ensureAdjacentSlides() {
-        if (!state.posts.length) return;
-        const beforeIndex = state.currentIndex - 1;
-        const afterIndex = state.currentIndex + 1;
-        Promise.resolve().then(async () => {
-          if (beforeIndex >= 0) await ensureSlide(beforeIndex);
-          if (afterIndex < state.posts.length) await ensureSlide(afterIndex);
-          refreshTrackSlides();
-        }).catch((error) => console.warn('Adjacent preload failed', error));
-      }
-
-      function schedulePreloadAroundIndex(index) {
-        for (let offset = 1; offset <= PRELOAD_DISTANCE; offset += 1) {
-          const nextIndex = index + offset;
-          const previousIndex = index - offset;
-          if (nextIndex < state.posts.length) {
-            ensureSlide(nextIndex).catch((error) => console.warn('Preload failed', error));
-          }
-          if (previousIndex >= 0) {
-            ensureSlide(previousIndex).catch((error) => console.warn('Preload failed', error));
-          }
-        }
-      }
-
       function animateTrackTo(targetY, withTransition = true) {
         if (withTransition && !reducedMotion.matches) {
           reelTrack.classList.add('animating');
@@ -2093,11 +2114,11 @@ function renderApp(url) {
               resolve();
             };
             const done = (event) => {
-              if (event && event.target !== reelTrack) return;
+              if (event.target !== reelTrack || event.propertyName !== 'transform') return;
               cleanup();
             };
             const fallbackTimer = setTimeout(cleanup, TRACK_TRANSITION_FALLBACK_MS);
-            reelTrack.addEventListener('transitionend', done, { once: true });
+            reelTrack.addEventListener('transitionend', done);
           });
         }
         reelTrack.classList.remove('animating');
@@ -2139,7 +2160,7 @@ function renderApp(url) {
 
       function handleVideoEnded(video) {
         finalizeVideoPlaybackChunk(video);
-        if (state.currentMedia !== video || playbackBlocked()) return;
+        if (state.currentMedia !== video || state.animationLock || playbackBlocked()) return;
         const playback = state.videoPlayback.get(video);
         if (!playback) return;
         if (playback.totalMs + 50 < playback.targetMs) {
@@ -2165,7 +2186,7 @@ function renderApp(url) {
       function handleViewportResize() {
         const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
         document.documentElement.style.setProperty('--app-height', height + 'px');
-        if (state.currentSlide) {
+        if (state.currentSlide && !state.animationLock && !state.touchActive) {
           animateTrackTo(0, false);
           refreshTrackSlides();
         }
