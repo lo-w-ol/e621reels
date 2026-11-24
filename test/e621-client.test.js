@@ -5,6 +5,7 @@ import {
   backoffDelay,
   createRateLimiter,
   createResponseCache,
+  fetchPostsPage,
   fetchTagSuggestions,
   mapPhotoPost,
   mapReelPost,
@@ -16,6 +17,28 @@ function virtualClock() {
   const clock = { t: 0 };
   return { clock, now: () => clock.t, sleep: async (ms) => { clock.t += ms; } };
 }
+
+test('post pages accept the current e621 array and nested media fields', async () => {
+  const original = { url: 'https://static1.e621.net/original', width: 720, height: 900 };
+  const preview = { webp: 'https://static1.e621.net/preview.webp' };
+  const sample = { jpg: 'https://static1.e621.net/sample.jpg', width: 480 };
+  const reply = jsonResponse([
+    { id: 1, files: { meta: { ext: 'mp4' }, original, preview }, stats: { score: { total: 12 } }, tags: ['animated'] },
+    { id: 2, files: { meta: { ext: 'jpg', has_sample: true }, original, preview, sample }, tags: ['fox'] },
+    { id: 3, files: { meta: { ext: 'mp4' } } },
+  ]);
+  const { client } = scriptedClient({ responses: [reply, reply.clone()] });
+  const reels = await fetchPostsPage(client, { view: 'reels', tags: 'animated', page: 1, limit: 24 });
+  assert.equal(reels.data.rawCount, 3);
+  assert.deepEqual(reels.data.posts.map(({ id, mediaUrl, previewUrl, score }) => ({ id, mediaUrl, previewUrl, score })), [
+    { id: 1, mediaUrl: original.url, previewUrl: preview.webp, score: 12 },
+  ]);
+  const photos = await fetchPostsPage(client, { view: 'photos', tags: '-animated', page: 1, limit: 24 });
+  assert.equal(photos.data.rawCount, 3);
+  assert.deepEqual(photos.data.posts.map(({ id, fileUrl, sampleUrl, sampleWidth }) => ({ id, fileUrl, sampleUrl, sampleWidth })), [
+    { id: 2, fileUrl: original.url, sampleUrl: sample.jpg, sampleWidth: 480 },
+  ]);
+});
 
 test('rate limiter spaces request starts at least intervalMs apart', async () => {
   const { clock, now, sleep } = virtualClock();

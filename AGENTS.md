@@ -321,3 +321,9 @@ When making changes in this repository, append entries to this file so the next 
 ### Validation performed
 - `npm test` (33 pass) and `npm run check` (wrangler dry-run) pass.
 - Harness before → after: empty results 16 → 1 request; hang: endless spinner → error + retry at ~33 s; 503×2: dead end → recovered at ~3.7 s; scroll storm: stalled at 36 photos → 720 photos with ≥1 s spacing and never more than one request in flight; reload/back: 2 → 0 API requests with scroll position restored; lightbox open: 3 originals → 3 samples + 1 original; autocomplete "foxes" then backspacing to "fox": 7 → 3 requests; reels 503: blank → visible message + retry; isolated first-image time unchanged within noise (~550 → ~575 ms cold, including the module fetch).
+
+## 2026-11-24 — Restore feeds after the e621 response change
+
+- Confirmed that live `/posts.json` returns a top-level array with media in `files` and scores in `stats.score`.
+- Updated the shared browser client to accept both response formats and preserve raw page counts for pagination. The current response supplies flat tags, so the UI uses its existing unknown-artist label when artist categories are unavailable.
+- Added a regression test for the current image and video layouts, including a post without a public media URL.

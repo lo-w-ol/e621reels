@@ -456,8 +456,26 @@ export function buildAutocompleteUrl(query) {
   return url.toString();
 }
 
+function getPosts(payload) {
+  if (Array.isArray(payload)) return payload;
+  return Array.isArray(payload?.posts) ? payload.posts : null;
+}
+
 export function hasPostsArray(payload) {
-  return Boolean(payload) && Array.isArray(payload.posts);
+  return getPosts(payload) !== null;
+}
+
+// Keep the media mappers compatible with both versions of the e621 response.
+function normalizePost(post) {
+  if (!post?.files) return post;
+  const { meta, original, preview, sample } = post.files;
+  return {
+    ...post,
+    file: { ...original, ext: meta?.ext },
+    preview: { url: preview?.webp || preview?.jpg },
+    sample: { width: sample?.width, url: sample?.webp || sample?.jpg, has: meta?.has_sample },
+    score: post.stats?.score,
+  };
 }
 
 export function sanitizeAutocompleteQuery(value) {
@@ -475,7 +493,8 @@ function artistsOf(post) {
 
 // Photo grid post. Returns null when e621 gives no viewable image (it hides file, sample and preview
 // URLs of some posts from logged-out visitors).
-export function mapPhotoPost(post) {
+export function mapPhotoPost(rawPost) {
+  const post = normalizePost(rawPost);
   if (!post || !post.file) return null;
   const ext = String(post.file.ext || '').toLowerCase();
   if (!IMAGE_EXTS.has(ext)) return null;
@@ -498,7 +517,8 @@ export function mapPhotoPost(post) {
   };
 }
 
-export function mapReelPost(post) {
+export function mapReelPost(rawPost) {
+  const post = normalizePost(rawPost);
   if (!post || !post.file || !post.file.url) return null;
   const ext = String(post.file.ext || '').toLowerCase();
   if (!REEL_EXTS.has(ext)) return null;
@@ -553,7 +573,10 @@ export function fetchPostsPage(client, { view, tags, page, limit, signal, onStat
     ttlMs: POSTS_TTL_MS,
     staleTtlMs: POSTS_STALE_TTL_MS,
     validate: hasPostsArray,
-    transform: (payload) => ({ rawCount: payload.posts.length, posts: payload.posts.map(mapPost).filter(Boolean) }),
+    transform: (payload) => {
+      const posts = getPosts(payload);
+      return { rawCount: posts.length, posts: posts.map(mapPost).filter(Boolean) };
+    },
     signal,
     onStatus,
     bypassCache,
