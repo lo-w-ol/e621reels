@@ -475,7 +475,22 @@ function normalizePost(post) {
     preview: { url: preview?.webp || preview?.jpg },
     sample: { width: sample?.width, url: sample?.webp || sample?.jpg, has: meta?.has_sample },
     score: post.stats?.score,
+    fav_count: post.stats?.favorites ?? post.fav_count,
+    comment_count: post.stats?.comments ?? post.comment_count,
+    duration: meta?.duration ?? post.duration,
   };
+}
+
+function cleanCaption(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  return raw
+    .replace(/\[\/?(?:b|i|u|s|spoiler|quote|code|section|expand|color|size|thumb|img)[^\]]*\]/gi, '')
+    .replace(/\[url=[^\]]+\]([^\]]+)\[\/url\]/gi, '$1')
+    .replace(/"([^"]+)":https?:\/\/\S+/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
 }
 
 export function sanitizeAutocompleteQuery(value) {
@@ -517,8 +532,13 @@ export function mapPhotoPost(rawPost) {
     width: post.file.width || 0,
     height: post.file.height || 0,
     sampleWidth: (sampleUrl && post.sample.width) || 0,
+    score: (post.score && post.score.total) || 0,
+    favCount: Number.isFinite(post.fav_count) ? post.fav_count : null,
+    commentCount: Number.isFinite(post.comment_count) ? post.comment_count : null,
+    rating: post.rating || 'u',
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
     artistText: artists.join(', '),
+    caption: cleanCaption(post.description),
     postTags: postTagNames(post.tags),
     artistTags: Array.isArray(post.tags) ? post.tags : [],
   };
@@ -537,6 +557,9 @@ export function mapReelPost(rawPost) {
     ext,
     type: ext === 'webm' || ext === 'mp4' ? 'video' : 'image',
     score: (post.score && post.score.total) || 0,
+    favCount: Number.isFinite(post.fav_count) ? post.fav_count : null,
+    commentCount: Number.isFinite(post.comment_count) ? post.comment_count : null,
+    duration: Number.isFinite(post.duration) ? post.duration : 0,
     rating: post.rating || 'u',
     width: post.file.width || (post.sample && post.sample.width) || 0,
     height: post.file.height || (post.sample && post.sample.height) || 0,
@@ -545,6 +568,7 @@ export function mapReelPost(rawPost) {
     previewUrl: (post.preview && post.preview.url) || (post.sample && post.sample.url) || post.file.url,
     sourceUrl: E621_ORIGIN + '/posts/' + post.id,
     artistText: artist.join(', '),
+    caption: cleanCaption(post.description),
     postTags: postTagNames(post.tags),
     artistTags: Array.isArray(post.tags) ? post.tags : [],
     description: [

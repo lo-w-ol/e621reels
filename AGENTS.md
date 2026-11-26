@@ -356,3 +356,11 @@ When making changes in this repository, append entries to this file so the next 
 - Put More like this beside Post details as soon as a reel is available.
 - Use the viewer fit setting and the video dimensions to size loading thumbnails. Reveal the decoded frame when it is ready and keep it visible during buffering.
 - Verified the action and video transition in Chromium at 320px and 1200px with square thumbnails for tall and wide videos.
+
+## 2026-11-26 — Reels/app UI redesign and safe local-only Saved library
+
+- Redesigned the viewer shell and shared chrome across Reels, Photos, Settings, About, and Privacy to match the dark glass + lavender/pink layout: floating segmented Trending/Top Scored top bar with quick Search and Filters icon buttons, right-side vertical action rail on Reels (source paw avatar, score heart, details/comments sheet, Save bookmark, Similar/More like this, Share, and audio/mute disc), bottom-left artist handle/caption/interactive `#tag` chips/audio pill, interactive bottom scrubber bar with timestamps, and a shared 4-tab bottom navigation bar (`Reels`, `Photos`, `Saved`, `Settings`) replacing the old top-right burger menu.
+- Implemented `src/client/saved-posts.js` (`fr_saved_v1` in `localStorage` instead of HTTP cookies) so saved posts are never sent to the Cloudflare Worker on HTTP requests, are not limited to 4 KB, and stay strictly on the user's device. Enforced strict schema validation and an HTTPS e621/e926 host allowlist on every read/write/import, with cross-tab sync, in-memory fallback when storage is unavailable, JSON export/import, and a 300-item cap.
+- Added `/saved` (`src/saved-page.js`) with All/Reels/Photos filtering, an in-page media viewer modal, JSON backup export/import, and clear-all controls; added quick-save buttons to Reels, Photo Grid tiles, and the Photo lightbox; updated `/settings` with Saved library management and `/privacy` (effective date `2026-11-26`) to disclose `fr_saved_v1`.
+- Verified with `npm test` (44/44 passing including 5 new `saved-posts` unit tests), `npm run check` (`wrangler deploy --dry-run`), and headless Chrome visual + runtime inspection across mobile (`390×844`) and desktop (`1280×860`) viewports with zero console/runtime errors.
+

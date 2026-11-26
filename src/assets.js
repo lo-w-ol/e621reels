@@ -9,6 +9,7 @@ import postCreditSource from './client/post-credit.js';
 import tagAutocompleteSource from './client/tag-autocomplete.js';
 
 import moreLikeThisSource from './client/more-like-this.js';
+import savedPostsSource from './client/saved-posts.js';
 
 const CLIENT_FILES = {
   'e621-client.js': e621ClientSource,
@@ -17,6 +18,7 @@ const CLIENT_FILES = {
   'more-like-this.js': moreLikeThisSource,
   'tag-autocomplete.js': tagAutocompleteSource,
   'post-credit.js': postCreditSource,
+  'saved-posts.js': savedPostsSource,
 };
 
 // FNV-1a; only needs to change whenever any client file changes.

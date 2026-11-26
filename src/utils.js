@@ -48,6 +48,7 @@ export function sanitizeAutocompleteQuery(raw) {
 
 const ALLOWED_CORS_ORIGINS = new Set([
   'https://furryreel.com',
+  'https://beta.furryreel.com',
   'http://localhost:8787',
   'http://127.0.0.1:8787',
 ]);

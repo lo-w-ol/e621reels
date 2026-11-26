@@ -1,5 +1,15 @@
 import { handlePosts, handleTagAutocomplete } from './api.js';
 import { clientAssetUrl, serveClientAsset } from './assets.js';
+import { renderSavedPage } from './saved-page.js';
+import {
+  ICONS,
+  renderBottomNav,
+  renderBottomNavScript,
+  renderBottomNavStyles,
+  renderFeedTopBar,
+  renderFeedTopBarStyles,
+  renderToastStyles,
+} from './ui.js';
 import { formatTagLabel, escapeHtml, serializeJsonLd, sanitizeTags, sanitizeRating, sanitizeRatioFilter, htmlHeaders } from './utils.js';
 
 export default {
@@ -38,6 +48,12 @@ export default {
 
     if (url.pathname === '/photos') {
       return new Response(renderPhotoGridPage(url), {
+        headers: htmlHeaders(),
+      });
+    }
+
+    if (url.pathname === '/saved') {
+      return new Response(renderSavedPage(), {
         headers: htmlHeaders(),
       });
     }
@@ -81,7 +97,7 @@ function renderApp(url) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(seo.title)}</title>
     <meta name="description" content="${escapeHtml(seo.description)}" />
-    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="robots" content="${url.hostname === 'beta.furryreel.com' ? 'noindex,nofollow' : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'}" />
     <link rel="canonical" href="${escapeHtml(seo.canonicalUrl)}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FurryReel" />
@@ -96,57 +112,69 @@ function renderApp(url) {
     <link rel="preconnect" href="https://e621.net" crossorigin />
     <link rel="preconnect" href="https://static1.e621.net" />
     <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}" />
+    <link rel="modulepreload" href="${clientAssetUrl('saved-posts.js')}" />
     <script type="application/ld+json">${serializeJsonLd(seo.structuredData)}</script>
     <style>
       :root {
         color-scheme: dark;
-        --bg: #080808;
-        --panel: rgba(20, 20, 24, 0.82);
-        --panel-strong: rgba(15, 15, 20, 0.94);
-        --text: #f6f6f6;
-        --muted: #b6b6c2;
-        --accent: #ff2f78;
-        --accent-soft: rgba(255, 47, 120, 0.18);
-        --outline: rgba(255,255,255,0.12);
-        --safe-top: max(18px, env(safe-area-inset-top));
-        --safe-bottom: max(24px, env(safe-area-inset-bottom));
+        --bg: #050508;
+        --panel: rgba(16, 16, 24, 0.78);
+        --panel-strong: rgba(12, 12, 18, 0.94);
+        --text: #f7f7fb;
+        --muted: #9e9eb4;
+        --lavender: #b7adff;
+        --accent: #ff3e88;
+        --accent-soft: rgba(255, 62, 136, 0.2);
+        --outline: rgba(255, 255, 255, 0.14);
+        --safe-top: max(14px, env(safe-area-inset-top));
+        --safe-bottom: max(12px, env(safe-area-inset-bottom));
         --app-height: 100dvh;
       }
       @supports not (height: 100dvh) {
-        :root {
-          --app-height: 100vh;
-        }
+        :root { --app-height: 100vh; }
       }
       * { box-sizing: border-box; }
-      html, body {
-        overscroll-behavior: none;
-      }
+      html, body { overscroll-behavior: none; }
       body {
         margin: 0;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: radial-gradient(circle at top, #171727 0%, var(--bg) 48%);
+        background: radial-gradient(circle at top, #171528 0%, var(--bg) 52%);
         color: var(--text);
         min-height: 100vh;
       }
-      button, input, select {
-        font: inherit;
-      }
-      .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.fr-nav-fallback a[aria-current="page"]{background:rgba(255,47,120,.2)}.fr-nav-fallback[hidden]{display:none}
+      button, input, select { font: inherit; }
+      ${renderBottomNavStyles()}
+      ${renderFeedTopBarStyles()}
+      ${renderToastStyles()}
       .shell {
         min-height: var(--app-height);
         display: grid;
         place-items: center;
-        padding: 20px;
+        padding: 16px;
       }
       .app {
-        width: min(100%, 1240px);
-        height: min(calc(var(--app-height) - 40px), 960px);
+        width: min(100%, 470px);
+        height: min(calc(var(--app-height) - 32px), 920px);
         border: 1px solid var(--outline);
-        border-radius: 32px;
+        border-radius: 30px;
         overflow: hidden;
         position: relative;
         background: #000;
-        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+        display: flex;
+        flex-direction: column;
+      }
+      @media (min-width: 900px) {
+        .app {
+          width: min(100%, 540px);
+        }
+      }
+      .reel-stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        background: #000;
         touch-action: none;
       }
       .viewport {
@@ -185,12 +213,8 @@ function renderApp(url) {
         height: 100%;
         background: #000;
       }
-      .reel-media {
-        object-fit: cover;
-      }
-      .reel-slide.fit .reel-media {
-        object-fit: contain;
-      }
+      .reel-media { object-fit: cover; }
+      .reel-slide.fit .reel-media { object-fit: contain; }
       .reel-media-fallback {
         background-size: cover;
         background-position: center;
@@ -203,24 +227,22 @@ function renderApp(url) {
         margin: auto;
         background-size: var(--preview-fit, contain);
       }
-      .reel-slide.loading .reel-media-fallback {
-        opacity: 1;
-      }
+      .reel-slide.loading .reel-media-fallback { opacity: 1; }
       .load-indicator {
         position: absolute;
         left: 50%;
-        bottom: calc(var(--safe-bottom) + 108px);
-        transform: translateX(-50%);
+        top: 50%;
+        transform: translate(-50%, -50%);
         z-index: 3;
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        padding: 7px 11px;
+        padding: 8px 13px;
         border-radius: 999px;
-        background: rgba(0, 0, 0, 0.62);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(10, 10, 16, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.18);
         color: rgba(255, 255, 255, 0.92);
-        font-size: 0.75rem;
+        font-size: 0.76rem;
         font-weight: 600;
         letter-spacing: 0.01em;
         opacity: 0;
@@ -228,480 +250,426 @@ function renderApp(url) {
         pointer-events: none;
       }
       .reel-slide.loading .load-indicator,
-      .reel-slide.awaiting-play .load-indicator {
-        opacity: 1;
-      }
+      .reel-slide.awaiting-play .load-indicator { opacity: 1; }
       .load-indicator-dot {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
-        background: rgba(255, 255, 255, 0.95);
+        background: var(--lavender);
         animation: reelPulse 0.85s ease-in-out infinite alternate;
       }
       @keyframes reelPulse {
         from { transform: scale(0.72); opacity: 0.5; }
-        to { transform: scale(1.02); opacity: 1; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .load-indicator-dot {
-          animation: none;
-        }
+        to { transform: scale(1.05); opacity: 1; }
       }
       .gradient {
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, rgba(0, 0, 0, 0.68) 0%, rgba(0, 0, 0, 0.08) 24%, rgba(0, 0, 0, 0.1) 60%, rgba(0, 0, 0, 0.86) 100%);
+        background: linear-gradient(
+          180deg,
+          rgba(0, 0, 0, 0.62) 0%,
+          rgba(0, 0, 0, 0.06) 20%,
+          rgba(0, 0, 0, 0.04) 55%,
+          rgba(0, 0, 0, 0.56) 78%,
+          rgba(0, 0, 0, 0.92) 100%
+        );
         pointer-events: none;
+        z-index: 1;
+      }
+      .playback-flash {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%) scale(0.82);
+        width: 66px;
+        height: 66px;
+        border-radius: 999px;
+        background: rgba(10, 10, 16, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        z-index: 9;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+      .playback-flash.show {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
       }
       .overlay {
         position: absolute;
         inset: 0;
-        display: grid;
-        grid-template-rows: 1fr auto;
-        padding: calc(var(--safe-top) + 70px) 16px var(--safe-bottom);
-        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 72px 12px 6px 14px;
+        z-index: 4;
         pointer-events: none;
       }
-      .overlay > * {
+      .bottom-stage {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        pointer-events: none;
+      }
+      .reel-meta {
+        flex: 1;
+        min-width: 0;
+        display: grid;
+        gap: 7px;
+        padding-bottom: 6px;
         pointer-events: auto;
       }
-      .global-header{position:absolute;top:0;right:0;z-index:25;padding:calc(var(--safe-top) + 8px) 16px 8px}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:rgba(12,12,16,.66);color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:absolute;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:30}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.topbar,
-      .status-card,
-      .jump,
-      .pill-row,
-      .settings-toggle,
-      .filter-panel,
-      .app-header,
-      .burger-menu,
-      .progress,
-      .tagline {
-        display: none !important;
-      }
-      .brand h1 {
-        margin: 0;
-        font-size: 1.2rem;
-      }
-      .brand p,
-      .status,
-      .empty,
-      .meta p,
-      .hint,
-      .side-label,
-      .filter-panel label span,
-      .field-help,
-      .tagline,
-      .counter,
-      .swipe-hint,
-      .autocomplete-meta,
-      .autocomplete-empty {
-        color: var(--muted);
-      }
-      .badge-row {
+      .reel-meta[hidden] { display: none; }
+      .reel-author-row {
         display: flex;
-        gap: 8px;
+        align-items: center;
         flex-wrap: wrap;
-        justify-content: flex-end;
-        padding-left: 8px;
+        gap: 6px;
       }
-      .badge,
-      .pill,
-      .counter,
-      .swipe-hint {
-        border: 1px solid var(--outline);
-        background: rgba(8, 8, 12, 0.5);
-        backdrop-filter: blur(18px);
-        border-radius: 999px;
-        padding: 8px 12px;
-      }
-      .status-card {
-        align-self: center;
-        justify-self: center;
-        max-width: 80%;
-        text-align: center;
-        background: var(--panel);
-        border: 1px solid var(--outline);
-        border-radius: 24px;
-        padding: 18px 20px;
-        backdrop-filter: blur(18px);
-        z-index: 3;
-      }
-      .bottom {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-between;
-        gap: 8px;
-        align-items: end;
-      }
-      .meta {
-        display: grid;
-        gap: 10px;
-        min-width: 0;
-      }
-      .meta h2 {
-        display: none;
-      }
-      .meta p {
-        margin: 0;
-        line-height: 1.4;
-      }
-      .pill-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .pill {
+      .reel-author-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.96rem;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .side-actions {
-        display: flex;
-        gap: 8px;
-        justify-items: center;
-      }
-      .credit {
-        font-size: .95rem;
-        background: rgba(8,8,12,.5);
-        border: 1px solid var(--outline);
+      .reel-author-btn:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; border-radius: 6px; }
+      .reel-verified { color: var(--lavender); display: inline-flex; flex: none; }
+      .reel-artist-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 9px;
         border-radius: 999px;
-        padding: 9px 14px;
-        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(16, 16, 24, 0.65);
+        color: #e6e6f2;
+        font-size: 0.73rem;
+        font-weight: 600;
+        text-decoration: none;
+        backdrop-filter: blur(10px);
       }
-      .privacy-note{margin:8px 0 0;color:var(--muted);font-size:.78rem;}
-      .privacy-note a{color:#fff}.ux-chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.ux-chip{border:1px solid var(--outline);background:rgba(8,8,12,.5);color:var(--text);border-radius:999px;padding:8px 12px;font-size:.78rem;min-height:40px}.ux-chip.selected{background:var(--accent-soft);border-color:rgba(255,47,120,.5)}.ux-notice{margin-top:10px;padding:10px 12px;border:1px solid var(--outline);border-radius:12px;background:rgba(8,8,12,.45);font-size:.8rem;line-height:1.4}.ux-notice[hidden]{display:none}.onboarding{position:absolute;inset:auto 12px calc(var(--safe-bottom) + 72px);z-index:20;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:12px;backdrop-filter:blur(14px)}.onboarding[hidden]{display:none}.onboarding h3{margin:0 0 6px;font-size:.95rem}.onboarding p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.onboarding-actions{display:flex;justify-content:flex-end;margin-top:10px}.feed-status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;width:min(86%,340px);text-align:center;border:1px solid var(--outline);background:rgba(11,11,15,.9);border-radius:14px;padding:14px;backdrop-filter:blur(14px)}.feed-status[hidden],.feed-status button[hidden]{display:none}.feed-status strong{display:block;margin-bottom:6px;font-size:.95rem}.feed-status p{margin:0;font-size:.82rem;color:var(--muted);line-height:1.35}.feed-status button{margin-top:10px}.focus-ring:focus-visible,.action-button:focus-visible,.global-menu-toggle:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
-      .credit a { color: #fff; }
-      ${renderFeedFilterStyles()}
-      .reel-progress{position:absolute;bottom:var(--safe-bottom);left:16px;right:16px;height:3px;z-index:3;border-radius:3px;background:#ffffff40;opacity:0;pointer-events:none}
-      .reel-progress.show{opacity:1}.reel-progress div{height:100%;width:0;background:#ff70aa;border-radius:3px}
-      #reelDetails{position:relative;max-width:min(66vw,380px);color:#fff}#reelDetails[open]{background:#14141ef2;border-radius:12px}
-      #reelDetails summary{display:list-item;box-sizing:border-box;padding:11px;min-height:44px}
-      #reelDetails .credit{border:0;background:none;border-radius:0;padding:4px 11px 12px;overflow-wrap:anywhere}
-      .overlay > .bottom{grid-row:2;pointer-events:none}
-      .reel-post-actions{display:flex;align-items:end;gap:8px;max-width:100%}
-      .reel-post-actions[hidden]{display:none}
-      .reel-post-actions button{flex:none}
-      .reel-post-actions > *,.bottom > .reel-controls{pointer-events:auto}
-      .reel-controls{margin-inline-start:auto;align-self:end}.reel-controls button{min-width:44px;min-height:44px}.reel-controls button:disabled{opacity:.5;cursor:default}
-      .reel-slide[inert] .load-indicator{opacity:0}
-      .reel-slide.failed .reel-media-fallback{opacity:.6}
-      .reel-slide.failed .load-indicator,.reel-slide.failed .reel-media,.reel-slide.loading .reel-media{visibility:hidden}
-      @media(prefers-reduced-motion:reduce){.reel-track.animating,.scrub-hud,.reel-progress{transition:none}.load-indicator-dot{animation:none}}
+      .reel-artist-pill:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+      .reel-artist-pill:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; }
+      .reel-caption {
+        margin: 0;
+        font-size: 0.86rem;
+        line-height: 1.38;
+        color: rgba(247, 247, 251, 0.92);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+      }
+      .reel-hashtags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .reel-hashtag {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--lavender);
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+      }
+      .reel-hashtag:hover { text-decoration: underline; color: #d5ceff; }
+      .reel-hashtag:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; border-radius: 4px; }
+      .reel-audio-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+        max-width: 100%;
+        padding: 6px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(14, 14, 22, 0.68);
+        color: #ececf6;
+        font-size: 0.76rem;
+        font-weight: 600;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+      }
+      .reel-audio-pill span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .reel-audio-pill .audio-note { color: var(--lavender); display: inline-flex; flex: none; }
+      .reel-audio-pill:hover { background: rgba(30, 30, 44, 0.82); }
+      .reel-audio-pill:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; }
+
+      .action-rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 6px;
+        pointer-events: auto;
+        flex: none;
+      }
+      .action-rail[hidden] { display: none; }
+      .rail-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+      }
+      .rail-btn {
+        position: relative;
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(12, 12, 18, 0.68);
+        color: #f6f6fb;
+        display: grid;
+        place-items: center;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        cursor: pointer;
+        text-decoration: none;
+        transition: transform 120ms ease, background 140ms ease, border-color 140ms ease, color 140ms ease;
+      }
+      .rail-btn:hover { background: rgba(28, 28, 40, 0.86); border-color: rgba(255, 255, 255, 0.28); }
+      .rail-btn:active { transform: scale(0.92); }
+      .rail-btn:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; }
+      .rail-btn--avatar {
+        width: 46px;
+        height: 46px;
+        border: 2px solid transparent;
+        background:
+          linear-gradient(#12121a, #12121a) padding-box,
+          linear-gradient(135deg, #b7adff, #ff3e88) border-box;
+        color: #c7bfff;
+      }
+      .rail-corner-badge {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        width: 19px;
+        height: 19px;
+        border-radius: 999px;
+        background: #9f93ff;
+        color: #0b0b12;
+        border: 2px solid #09090e;
+        display: grid;
+        place-items: center;
+      }
+      .rail-btn--heart { color: var(--accent); }
+      .rail-btn--save.saved {
+        color: var(--accent);
+        border-color: rgba(255, 62, 136, 0.5);
+        background: rgba(255, 62, 136, 0.18);
+      }
+      .rail-btn--audio {
+        border: 1.5px solid rgba(255, 255, 255, 0.22);
+        background: radial-gradient(circle at center, #20202e 0%, #0d0d14 70%);
+        color: var(--accent);
+      }
+      .rail-btn--audio.is-muted {
+        color: #9e9eb4;
+      }
+      .rail-btn--audio.is-muted .rail-corner-badge {
+        background: #3a3a4c;
+        color: #e2e2ee;
+      }
+      .rail-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: rgba(247, 247, 251, 0.92);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+        line-height: 1.1;
+      }
+
+      .reel-scrubber {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        width: 100%;
+        padding: 4px 0 2px;
+        pointer-events: auto;
+      }
+      .reel-scrubber[hidden] { display: none; }
+      .scrubber-time {
+        font-size: 0.7rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: rgba(242, 242, 250, 0.82);
+        min-width: 30px;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+      }
+      .scrubber-time:last-child { text-align: right; }
+      .scrubber-track {
+        position: relative;
+        flex: 1;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        touch-action: none;
+      }
+      .scrubber-rail {
+        width: 100%;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.22);
+        overflow: hidden;
+      }
+      .scrubber-track:hover .scrubber-rail { height: 6px; }
+      .scrubber-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #b7adff 0%, #ff3e88 100%);
+      }
 
       .scrub-hud {
         position: absolute;
         left: 50%;
-        top: 50%;
+        top: 46%;
         transform: translate(-50%, -50%);
         z-index: 12;
-        min-width: 220px;
+        min-width: 210px;
         padding: 12px 14px;
-        border-radius: 14px;
-        background: rgba(0,0,0,.72);
-        border: 1px solid rgba(255,255,255,.26);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity .12s linear;
-      }
-      .scrub-hud.show { opacity: 1; }
-      .scrub-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.18); overflow: hidden; margin-top: 8px; }
-      .scrub-bar > div { height: 100%; width: 0; background: linear-gradient(90deg, #ff59a0 0%, #ffd36b 100%); }
-      .action-button {
-        width: 54px;
-        height: 54px;
-        border-radius: 999px;
-        border: 1px solid var(--outline);
-        background: var(--panel);
-        color: var(--text);
-        display: grid;
-        place-items: center;
-        backdrop-filter: blur(20px);
-        cursor: pointer;
-      }
-      .settings-button {
-        width: 38px;
-        height: 38px;
-        background: rgba(10, 10, 14, 0.18);
-        border-color: rgba(255,255,255,0.18);
-        opacity: 0.42;
-        transition: opacity 140ms ease, background 140ms ease;
-      }
-      .settings-button:hover,
-      .settings-button:focus-visible,
-      .settings-button.active {
-        opacity: 1;
-        background: rgba(14, 14, 18, 0.62);
-      }
-      .side-label {
-        font-size: 0.74rem;
-      }
-      .progress {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: rgba(255,255,255,0.08);
-        z-index: 4;
-      }
-      .progress > div {
-        height: 100%;
-        width: 0;
-        background: linear-gradient(90deg, #ff59a0 0%, #ffd36b 100%);
-        transition: width 100ms linear;
-      }
-      .settings-toggle {
-        position: absolute;
-        right: 16px;
-        top: calc(var(--safe-top) + 58px);
-        z-index: 5;
-      }
-      .filter-panel {
-        position: absolute;
-        top: 74px;
-        right: 12px;
-        left: 12px;
-        z-index: 6;
-        border: 1px solid var(--outline);
-        background: var(--panel-strong);
-        backdrop-filter: blur(24px);
-        border-radius: 24px;
-        padding: 18px;
-        display: grid;
-        gap: 14px;
-        transform: translateY(-12px) scale(0.98);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 140ms ease, transform 180ms ease;
-      }
-      .filter-panel.open {
-        transform: translateY(0) scale(1);
-        opacity: 1;
-        pointer-events: auto;
-      }
-      .filter-panel h3 {
-        margin: 0 0 4px;
-      }
-      .filter-panel label {
-        display: grid;
-        gap: 8px;
-      }
-      .filter-panel input,
-      .filter-panel select,
-      .filter-panel button {
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        border-radius: 14px;
-        padding: 12px 14px;
-      }
-      .filter-panel input::placeholder {
-        color: rgba(255,255,255,0.42);
-      }
-      .settings-option {
-        grid-template-columns: auto 1fr;
-        align-items: center;
-        gap: 12px;
-      }
-      .settings-option input {
-        width: 20px;
-        height: 20px;
-        padding: 0;
-      }
-      .filter-actions,
-      .jump {
-        display: flex;
-        gap: 10px;
-      }
-      .filter-actions > *,
-      .jump > * {
-        flex: 1;
-      }
-      .primary,
-      .secondary {
-        cursor: pointer;
-      }
-      .primary {
-        background: linear-gradient(135deg, #ff4d98 0%, #ff7b4d 100%);
-        border: none;
-      }
-      .secondary {
-        background: rgba(255,255,255,0.08);
-      }
-      .meta.hidden-tags #tagList {
-        display: none;
-      }
-      .field-help,
-      .hint {
-        font-size: 0.87rem;
-        line-height: 1.45;
-      }
-      .input-with-autocomplete {
-        position: relative;
-      }
-      .autocomplete {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: calc(100% + 8px);
-        z-index: 7;
-        border: 1px solid var(--outline);
         border-radius: 16px;
-        background: rgba(10, 10, 14, 0.96);
-        backdrop-filter: blur(18px);
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
-        overflow: hidden;
-      }
-      .autocomplete[hidden] {
-        display: none;
-      }
-      .autocomplete-list {
-        display: grid;
-      }
-      .autocomplete-option,
-      .autocomplete-empty {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: 10px;
-        align-items: center;
-        width: 100%;
-        padding: 12px 14px;
-        border: 0;
-        border-top: 1px solid rgba(255,255,255,0.06);
-        background: transparent;
-        color: var(--text);
-        text-align: left;
-      }
-      .autocomplete-option:first-child,
-      .autocomplete-empty:first-child {
-        border-top: 0;
-      }
-      .autocomplete-option.active,
-      .autocomplete-option:hover,
-      .autocomplete-option:focus-visible {
-        background: rgba(255,255,255,0.08);
-        outline: none;
-      }
-      .autocomplete-tag {
-        overflow: hidden;
-      }
-      .autocomplete-name {
+        background: rgba(10, 10, 16, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        backdrop-filter: blur(14px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms linear;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
         font-weight: 600;
       }
-      .autocomplete-meta {
-        font-size: 0.78rem;
-        margin-top: 2px;
-      }
-      .autocomplete-empty {
-        grid-template-columns: 1fr;
-      }
-      .autocomplete-category {
-        width: 10px;
-        height: 10px;
+      .scrub-hud.show { opacity: 1; }
+      .scrub-bar {
+        height: 5px;
         border-radius: 999px;
-        background: #666;
+        background: rgba(255, 255, 255, 0.18);
+        overflow: hidden;
+        margin-top: 8px;
       }
-      .autocomplete-category[data-category="0"] { background: #b9b9b9; }
-      .autocomplete-category[data-category="1"] { background: #e7c94e; }
-      .autocomplete-category[data-category="3"] { background: #53b45e; }
-      .autocomplete-category[data-category="4"] { background: #f28b51; }
-      .autocomplete-category[data-category="5"] { background: #5f9bff; }
-      .autocomplete-category[data-category="6"] { background: #b36df6; }
-      .autocomplete-count {
-        font-size: 0.78rem;
-        color: var(--muted);
-        white-space: nowrap;
+      .scrub-bar > div {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(90deg, #b7adff 0%, #ff3e88 100%);
       }
-      .pill-button {
+
+      .ux-chip {
+        border: 1px solid var(--outline);
+        background: rgba(20, 20, 30, 0.85);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        min-height: 38px;
         cursor: pointer;
       }
-      .pill-button:hover,
-      .pill-button:focus-visible {
-        border-color: rgba(255,255,255,0.28);
-        background: rgba(255,255,255,0.12);
-        outline: none;
-      }
-      .pill-button.active {
-        background: var(--accent-soft);
-        border-color: rgba(255, 47, 120, 0.48);
-      }
-      .seo-content {
+      .ux-chip:hover { background: rgba(34, 34, 48, 0.95); }
+      .onboarding {
         position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+        inset: auto 14px 76px;
+        z-index: 22;
+        border: 1px solid rgba(183, 173, 255, 0.28);
+        background: rgba(12, 12, 18, 0.94);
+        border-radius: 18px;
+        padding: 14px;
+        backdrop-filter: blur(16px);
       }
-      .app-header {
+      .onboarding[hidden] { display: none; }
+      .onboarding h3 { margin: 0 0 6px; font-size: 0.95rem; }
+      .onboarding p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+      .onboarding-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+      .feed-status {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 10;
-        height: calc(var(--safe-top) + 58px);
-        display: flex;
-        align-items: flex-end;
-        gap: 10px;
-        padding: 10px 14px 10px;
-        background: linear-gradient(180deg, rgba(8,8,10,.96), rgba(8,8,10,.62));
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-        backdrop-filter: blur(14px);
-      }
-      .frame-pill {
-        font-size: .82rem;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 20;
+        width: min(86%, 340px);
+        text-align: center;
         border: 1px solid var(--outline);
+        background: rgba(12, 12, 18, 0.92);
+        border-radius: 18px;
+        padding: 16px;
+        backdrop-filter: blur(16px);
+      }
+      .feed-status[hidden], .feed-status button[hidden] { display: none; }
+      .feed-status strong { display: block; margin-bottom: 6px; font-size: 0.96rem; }
+      .feed-status p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+      .feed-status button { margin-top: 10px; }
+
+      .post-details-meta { display: grid; gap: 10px; font-size: 0.88rem; }
+      .post-details-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+      .post-details-stat {
+        padding: 5px 10px;
         border-radius: 999px;
-        background: rgba(255,255,255,.08);
-        padding: 7px 12px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        font-size: 0.78rem;
+        color: #e2e2ee;
       }
-      .app-header-title { font-weight: 700; letter-spacing: .01em; }
-      .nav-toggle { z-index: 12; }
-      .burger-menu {
-        position: absolute;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: min(80vw, 290px);
-        z-index: 11;
-        border-right: 1px solid var(--outline);
-        background: rgba(12, 12, 16, 0.98);
-        padding: calc(var(--safe-top) + 74px) 12px 18px;
-        display: grid;
+      .post-details-tags {
+        display: flex;
+        flex-wrap: wrap;
         gap: 6px;
-        transform: translateX(-110%);
-        transition: transform 220ms ease;
+        max-height: 180px;
+        overflow: auto;
       }
-      .burger-menu.open { transform: translateX(0); }
-      .burger-menu a {
-        color: var(--text);
-        text-decoration: none;
-        padding: 8px 10px;
-        border-radius: 10px;
+      .post-details-tag {
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(183, 173, 255, 0.25);
+        background: rgba(183, 173, 255, 0.1);
+        color: var(--lavender);
+        font-size: 0.78rem;
+        cursor: pointer;
       }
-      .burger-menu a:hover { background: rgba(255,255,255,0.08); }
-      @media (orientation: landscape) and (max-width: 960px) {
-        .shell {
-          padding: 0;
-        }
-        .app {
-          width: 100vw;
-          height: var(--app-height);
-          border-radius: 0;
-          border: none;
-        }
-        .overlay {
-          padding-left: max(14px, env(safe-area-inset-left));
-          padding-right: max(14px, env(safe-area-inset-right));
-        }
+      .post-details-tag:hover { background: rgba(183, 173, 255, 0.22); }
+
+      ${renderFeedFilterStyles()}
+      .reel-slide[inert] .load-indicator { opacity: 0; }
+      .reel-slide.failed .reel-media-fallback { opacity: 0.6; }
+      .reel-slide.failed .load-indicator,
+      .reel-slide.failed .reel-media,
+      .reel-slide.loading .reel-media { visibility: hidden; }
+      .seo-content {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
       }
-      @media (max-width: 640px) {
-        .shell {
-          padding: 0;
-        }
+      .focus-ring:focus-visible { outline: 2px solid #ffd36b; outline-offset: 2px; }
+      @media (prefers-reduced-motion: reduce) {
+        .reel-track.animating, .scrub-hud, .playback-flash { transition: none; }
+        .load-indicator-dot { animation: none; }
+      }
+      @media (orientation: landscape) and (max-width: 960px), (max-width: 640px) {
+        .shell { padding: 0; }
         .app {
           width: 100%;
           height: var(--app-height);
@@ -712,7 +680,6 @@ function renderApp(url) {
     </style>
   </head>
   <body>
-    ${renderFloatingNav('reels')}
     <div class="shell">
       <section class="seo-content" aria-hidden="true">
         <h1>${escapeHtml(seo.heading)}</h1>
@@ -721,33 +688,87 @@ function renderApp(url) {
         <ul>${landingLinks}</ul>
       </section>
       <main class="app" id="appRoot">
-        <div class="viewport" id="viewport">
-          <div class="reel-track" id="reelTrack"></div>
-        </div>
-        <div class="gradient"></div>
-        <div class="scrub-hud" id="scrubHud" aria-live="polite">
-          <div id="scrubTime">0:00 / 0:00</div>
-          <div class="scrub-bar"><div id="scrubBar"></div></div>
-        </div>
-        <section class="overlay">
-          <div class="bottom">
-            <div class="reel-post-actions" id="reelPostActions" hidden>
-              <details id="reelDetails">
-                <summary class="feed-control">Post details</summary>
-                <div class="meta" id="metaBlock"><div class="credit" id="postDescription"></div></div>
-              </details>
-              ${renderMoreLikeThisButton()}
-            </div>
-            <div class="side-actions reel-controls">
-              <button type="button" class="feed-control" id="togglePlayback" disabled>Pause</button>
-              <button class="action-button focus-ring" id="toggleMuteButton" type="button" aria-label="Unmute video audio">🔇</button>
-            </div>
+        <div class="reel-stage" id="reelStage">
+          <div class="viewport" id="viewport">
+            <div class="reel-track" id="reelTrack"></div>
           </div>
-        </section>
-        <div class="reel-progress" id="reelProgress" aria-hidden="true"><div id="progressBar"></div></div>
-        <div class="feed-status" id="feedStatus" role="status" aria-live="polite" hidden><strong id="feedStatusTitle"></strong><p id="feedStatusText"></p><button class="ux-chip focus-ring" id="feedRetryButton" type="button" hidden>Try again</button> <button class="ux-chip focus-ring" id="emptyReelFilters" type="button" hidden>Edit filters</button></div>
-        <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up or down to browse, tap to pause, or drag sideways on a video to scrub. On a keyboard, use Space to play or pause and Shift + Left or Right to seek.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
+          <div class="gradient"></div>
+          ${renderFeedTopBar()}
+          <div class="playback-flash" id="playbackFlash" aria-hidden="true"></div>
+          <div class="scrub-hud" id="scrubHud" aria-live="polite">
+            <div id="scrubTime">0:00 / 0:00</div>
+            <div class="scrub-bar"><div id="scrubBar"></div></div>
+          </div>
+          <section class="overlay">
+            <div class="bottom-stage" id="reelPostActions" hidden>
+              <div class="reel-meta">
+                <div class="reel-author-row">
+                  <button type="button" class="reel-author-btn" id="reelAuthorHandle" aria-label="View artist details">@Artist</button>
+                  <span class="reel-verified" aria-hidden="true">${ICONS.verified}</span>
+                  <a class="reel-artist-pill" id="reelAuthorLink" target="_blank" rel="noreferrer noopener">Artist ${ICONS.externalLink}</a>
+                </div>
+                <p class="reel-caption" id="reelCaption"></p>
+                <div class="reel-hashtags" id="reelHashtags"></div>
+                <button type="button" class="reel-audio-pill" id="reelAudioPill" aria-label="Toggle video audio">
+                  <span class="audio-note">${ICONS.musicNote}</span>
+                  <span id="reelAudioLabel">Original Audio</span>
+                </button>
+              </div>
+
+              <div class="action-rail" aria-label="Post actions">
+                <div class="rail-item">
+                  <a class="rail-btn rail-btn--avatar" id="railSourceLink" target="_blank" rel="noreferrer noopener" aria-label="Open post on e621">
+                    ${ICONS.paw}
+                    <span class="rail-corner-badge" aria-hidden="true">${ICONS.externalLink}</span>
+                  </a>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn rail-btn--heart" id="railScoreBtn" aria-label="Post score and details">${ICONS.heart}</button>
+                  <span class="rail-label" id="railScoreCount">—</span>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn" id="railDetailsBtn" aria-label="Post details and artist credit" aria-haspopup="dialog">${ICONS.comment}</button>
+                  <span class="rail-label" id="railCommentCount">Info</span>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn rail-btn--save" id="railSaveBtn" aria-pressed="false" aria-label="Save post">${ICONS.bookmarkOutline}</button>
+                  <span class="rail-label" id="railSaveLabel">Save</span>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn" id="openMoreLikeThis" aria-haspopup="dialog" aria-label="More like this">${ICONS.sparkles}</button>
+                  <span class="rail-label">Similar</span>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn" id="railShareBtn" aria-label="Share post">${ICONS.share}</button>
+                  <span class="rail-label">Share</span>
+                </div>
+                <div class="rail-item">
+                  <button type="button" class="rail-btn rail-btn--audio is-muted focus-ring" id="toggleMuteButton" aria-label="Unmute video audio">
+                    ${ICONS.musicNote}
+                    <span class="rail-corner-badge" id="muteBadgeIcon" aria-hidden="true">${ICONS.mutedSlash}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="reel-scrubber" id="reelProgress">
+              <span class="scrubber-time" id="scrubberCurrent">0:00</span>
+              <div class="scrubber-track" id="scrubberTrack" role="slider" aria-label="Seek video" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <div class="scrubber-rail"><div class="scrubber-fill" id="progressBar"></div></div>
+              </div>
+              <span class="scrubber-time" id="scrubberTotal">0:00</span>
+            </div>
+          </section>
+
+          <div class="feed-status" id="feedStatus" role="status" aria-live="polite" hidden><strong id="feedStatusTitle"></strong><p id="feedStatusText"></p><button class="ux-chip focus-ring" id="feedRetryButton" type="button" hidden>Try again</button> <button class="ux-chip focus-ring" id="emptyReelFilters" type="button" hidden>Edit filters</button></div>
+          <aside class="onboarding" id="onboardingGuide" hidden><h3>Quick controls</h3><p>Swipe up or down to browse, tap to pause, drag sideways or use the bottom bar to scrub, and tap the bookmark icon to save posts locally.</p><div class="onboarding-actions"><button class="ux-chip focus-ring" id="dismissOnboarding" type="button" aria-label="Dismiss quick controls guide">Got it</button></div></aside>
+        </div>
+
+        ${renderBottomNav('reels', { embedded: true })}
+
         <div hidden aria-hidden="true">
+          <details id="reelDetails"><summary>Post details</summary><div class="meta" id="metaBlock"></div></details>
+          <button type="button" id="togglePlayback" disabled>Pause</button>
           <div id="statusCard"><strong id="statusTitle"></strong><p id="statusText"></p></div>
           <div id="postTitle"></div><div id="tagList"></div><div id="sortBadge"></div><div id="ratioBadge"></div><div id="counterBadge"></div>
           <button id="nextButton" type="button"></button><button id="previousButton" type="button"></button>
@@ -762,6 +783,20 @@ function renderApp(url) {
       </main>
     </div>
 
+    <dialog class="feed-filter-sheet" id="postDetailsDialog" aria-labelledby="postDetailsTitle">
+      <div class="post-details-meta">
+        <header>
+          <h2 id="postDetailsTitle">Post details</h2>
+          <button type="button" class="feed-control" id="closePostDetails">Close</button>
+        </header>
+        <div id="postDescription" style="font-size:.92rem;line-height:1.45"></div>
+        <div class="post-details-stats" id="postDetailsStats"></div>
+        <div class="post-details-tags" id="postDetailsTags"></div>
+      </div>
+    </dialog>
+
+    <div class="fr-toast" id="frToast" role="status" aria-live="polite"></div>
+
     ${renderFeedFilters()}
     ${renderMoreLikeThisDialog()}
     <noscript>
@@ -772,13 +807,21 @@ function renderApp(url) {
       </section>
     </noscript>
 
-    <script>${renderFloatingNavScript()}</script>
+    <script>${renderBottomNavScript()}</script>
     <script type="module">
       import { getBrowserClient, fetchPostsPage, fetchTagSuggestions, describeApiError, isAbortError, sanitizeAutocompleteQuery } from '${clientAssetUrl('e621-client.js')}';
-
+      import { getSavedStore } from '${clientAssetUrl('saved-posts.js')}';
       import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
       import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
       import { bindMoreLikeThis } from '${clientAssetUrl('more-like-this.js')}';
+
+      const savedStore = getSavedStore();
+      const ICON_BOOKMARK_OUTLINE = ${JSON.stringify(ICONS.bookmarkOutline)};
+      const ICON_BOOKMARK_FILLED = ${JSON.stringify(ICONS.bookmarkFilled)};
+      const ICON_SOUND_WAVE = ${JSON.stringify(ICONS.soundWave)};
+      const ICON_MUTED_SLASH = ${JSON.stringify(ICONS.mutedSlash)};
+      const ICON_PLAY = ${JSON.stringify(ICONS.play)};
+      const ICON_PAUSE = ${JSON.stringify(ICONS.pause)};
 
       const apiClient = getBrowserClient();
       const REEL_PAGE_SIZE = 24;
@@ -952,7 +995,6 @@ function renderApp(url) {
       mediaDisplaySelect.value = state.fitMedia ? 'contain' : 'fullscreen';
       ratioSelect.value = state.ratio;
       hideTagsToggle.checked = state.hideTags;
-      updateMuteControl();
       maybeShowOnboarding();
 
       navToggleButton.addEventListener('click', (event) => {
@@ -1036,7 +1078,143 @@ function renderApp(url) {
 
       nextButton.addEventListener('click', () => goToRelativePost(1));
       previousButton.addEventListener('click', () => goToRelativePost(-1));
-      toggleMuteButton.addEventListener('click', () => {
+      const reelAuthorHandle = document.getElementById('reelAuthorHandle');
+      const reelAuthorLink = document.getElementById('reelAuthorLink');
+      const reelCaption = document.getElementById('reelCaption');
+      const reelHashtags = document.getElementById('reelHashtags');
+      const reelAudioPill = document.getElementById('reelAudioPill');
+      const reelAudioLabel = document.getElementById('reelAudioLabel');
+      const railSourceLink = document.getElementById('railSourceLink');
+      const railScoreBtn = document.getElementById('railScoreBtn');
+      const railScoreCount = document.getElementById('railScoreCount');
+      const railDetailsBtn = document.getElementById('railDetailsBtn');
+      const railCommentCount = document.getElementById('railCommentCount');
+      const railSaveBtn = document.getElementById('railSaveBtn');
+      const railSaveLabel = document.getElementById('railSaveLabel');
+      const railShareBtn = document.getElementById('railShareBtn');
+      const muteBadgeIcon = document.getElementById('muteBadgeIcon');
+      const scrubberCurrent = document.getElementById('scrubberCurrent');
+      const scrubberTotal = document.getElementById('scrubberTotal');
+      const scrubberTrack = document.getElementById('scrubberTrack');
+      const playbackFlash = document.getElementById('playbackFlash');
+      const postDetailsDialog = document.getElementById('postDetailsDialog');
+      const closePostDetails = document.getElementById('closePostDetails');
+      const postDetailsStats = document.getElementById('postDetailsStats');
+      const postDetailsTags = document.getElementById('postDetailsTags');
+      const frToast = document.getElementById('frToast');
+      let toastTimer = null;
+      let flashTimer = null;
+
+      function showToast(message) {
+        frToast.textContent = message;
+        frToast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => frToast.classList.remove('show'), 2100);
+      }
+
+      function flashPlaybackIcon(paused) {
+        playbackFlash.innerHTML = paused ? ICON_PAUSE : ICON_PLAY;
+        playbackFlash.classList.add('show');
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(() => playbackFlash.classList.remove('show'), 460);
+      }
+
+      function formatCompactCount(value) {
+        if (!Number.isFinite(value)) return '—';
+        if (Math.abs(value) >= 1_000_000) return (value / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (Math.abs(value) >= 1_000) return (value / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+        return String(value);
+      }
+
+      function syncSaveButton(post) {
+        const isSaved = Boolean(post) && savedStore.has(post.id);
+        railSaveBtn.classList.toggle('saved', isSaved);
+        railSaveBtn.setAttribute('aria-pressed', String(isSaved));
+        railSaveBtn.setAttribute('aria-label', isSaved ? 'Remove post from Saved' : 'Save post');
+        railSaveBtn.innerHTML = isSaved ? ICON_BOOKMARK_FILLED : ICON_BOOKMARK_OUTLINE;
+        railSaveLabel.textContent = isSaved ? 'Saved' : 'Save';
+      }
+
+      function openPostDetails() {
+        const post = state.posts[state.currentIndex];
+        if (!post || postDetailsDialog.open) return;
+        postCredit.show(post);
+        postCredit.resolve();
+        const stats = [
+          'Post #' + post.id,
+          post.score ? 'Score ' + post.score : null,
+          post.rating ? 'Rating ' + String(post.rating).toUpperCase() : null,
+          post.width && post.height ? post.width + '×' + post.height : null,
+          post.ext ? post.ext.toUpperCase() : null,
+        ].filter(Boolean);
+        postDetailsStats.replaceChildren(...stats.map((text) => {
+          const span = document.createElement('span');
+          span.className = 'post-details-stat';
+          span.textContent = text;
+          return span;
+        }));
+        const tags = (post.postTags || []).slice(0, 30);
+        postDetailsTags.replaceChildren(...tags.map((tag) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'post-details-tag';
+          btn.textContent = '#' + tag;
+          btn.addEventListener('click', () => {
+            postDetailsDialog.close();
+            feedFilters.apply({ tags: tag });
+          });
+          return btn;
+        }));
+        state.filtersOpen = true;
+        syncPlayback();
+        postDetailsDialog.showModal();
+      }
+
+      closePostDetails.addEventListener('click', () => postDetailsDialog.close());
+      postDetailsDialog.addEventListener('close', () => {
+        postCredit.cancel();
+        state.filtersOpen = false;
+        syncPlayback();
+      });
+
+      railDetailsBtn.addEventListener('click', openPostDetails);
+      railScoreBtn.addEventListener('click', openPostDetails);
+      reelAuthorHandle.addEventListener('click', openPostDetails);
+
+      railSaveBtn.addEventListener('click', () => {
+        const post = state.posts[state.currentIndex];
+        if (!post) return;
+        const result = savedStore.toggle(post, 'reel');
+        syncSaveButton(post);
+        window.dispatchEvent(new CustomEvent('fr:saved-changed'));
+        if (result.saved) {
+          showToast(result.persisted ? 'Saved to your library' : 'Saved for this session');
+        } else {
+          showToast('Removed from Saved');
+        }
+      });
+
+      savedStore.subscribe(() => {
+        const post = state.posts[state.currentIndex];
+        if (post) syncSaveButton(post);
+      });
+
+      railShareBtn.addEventListener('click', async () => {
+        const post = state.posts[state.currentIndex];
+        if (!post) return;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: 'FurryReel post #' + post.id, url: post.sourceUrl });
+            return;
+          }
+          await navigator.clipboard.writeText(post.sourceUrl);
+          showToast('Post link copied');
+        } catch {
+          showToast('Could not copy link');
+        }
+      });
+
+      function toggleMute() {
         state.muted = !state.muted;
         if (state.currentMedia && state.currentMedia.tagName === 'VIDEO') {
           state.currentMedia.muted = state.muted;
@@ -1045,11 +1223,61 @@ function renderApp(url) {
         settings.reels.muted = state.muted;
         saveSettings(settings);
         updateMuteControl();
-      });
-      function updateMuteControl() {
-        toggleMuteButton.textContent = state.muted ? '🔇' : '🔊';
-        toggleMuteButton.setAttribute('aria-label', state.muted ? 'Unmute video audio' : 'Mute video audio');
       }
+
+      toggleMuteButton.addEventListener('click', toggleMute);
+      reelAudioPill.addEventListener('click', toggleMute);
+
+      function updateMuteControl() {
+        toggleMuteButton.classList.toggle('is-muted', state.muted);
+        toggleMuteButton.setAttribute('aria-label', state.muted ? 'Unmute video audio' : 'Mute video audio');
+        muteBadgeIcon.innerHTML = state.muted ? ICON_MUTED_SLASH : ICON_SOUND_WAVE;
+        const post = state.posts[state.currentIndex];
+        const artistName = post?.artistText ? post.artistText.split(',')[0].trim() : '';
+        if (post && post.type !== 'video') {
+          reelAudioLabel.textContent = 'Animated GIF';
+        } else if (state.muted) {
+          reelAudioLabel.textContent = artistName ? 'Muted · ' + artistName : 'Muted · Tap for sound';
+        } else {
+          reelAudioLabel.textContent = artistName ? 'Original Audio — ' + artistName : 'Original Audio';
+        }
+      }
+      updateMuteControl();
+
+      // Interactive seek on bottom scrubber track
+      let scrubberDragging = false;
+      function seekFromScrubberEvent(event) {
+        const video = state.currentMedia;
+        if (!video || video.tagName !== 'VIDEO' || !Number.isFinite(video.duration) || video.duration <= 0) return;
+        const rect = scrubberTrack.getBoundingClientRect();
+        if (!rect.width) return;
+        const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        video.currentTime = ratio * video.duration;
+        setProgressValue(ratio * 100, video.currentTime, video.duration);
+      }
+      scrubberTrack.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+        scrubberDragging = true;
+        scrubberTrack.setPointerCapture?.(event.pointerId);
+        seekFromScrubberEvent(event);
+      });
+      scrubberTrack.addEventListener('pointermove', (event) => {
+        if (!scrubberDragging) return;
+        event.stopPropagation();
+        seekFromScrubberEvent(event);
+      });
+      const stopScrubberDrag = () => { scrubberDragging = false; };
+      scrubberTrack.addEventListener('pointerup', stopScrubberDrag);
+      scrubberTrack.addEventListener('pointercancel', stopScrubberDrag);
+      scrubberTrack.addEventListener('keydown', (event) => {
+        const video = state.currentMedia;
+        if (!video || video.tagName !== 'VIDEO' || !Number.isFinite(video.duration) || video.duration <= 0) return;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+          event.preventDefault();
+          video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + (event.key === 'ArrowRight' ? 5 : -5)));
+          setProgressValue((video.currentTime / video.duration) * 100, video.currentTime, video.duration);
+        }
+      });
 
       dismissOnboarding.addEventListener('click', dismissOnboardingGuide);
       feedRetryButton.addEventListener('click', () => restartFeed());
@@ -1228,7 +1456,7 @@ function renderApp(url) {
       function shouldIgnoreGestureTarget(target) {
         if (!target) return false;
         if (filterPanel.classList.contains('open') && filterPanel.contains(target)) return true;
-        return Boolean(target.closest('button, a, input, select, option, label, textarea, summary, [data-tag-name]'));
+        return Boolean(target.closest('button, a, input, select, option, label, textarea, summary, dialog, .fr-bottom-nav, .fr-topbar, .reel-scrubber, .action-rail, [data-tag-name]'));
       }
 
       function beginGesture(point, source, event) {
@@ -1732,8 +1960,16 @@ function renderApp(url) {
         progressBar.style.width = '0%';
       }
 
-      function setProgressValue(value) {
-        progressBar.style.width = Math.max(0, Math.min(100, value)) + '%';
+      function setProgressValue(value, currentSeconds = null, totalSeconds = null) {
+        const clamped = Math.max(0, Math.min(100, value || 0));
+        progressBar.style.width = clamped + '%';
+        scrubberTrack.setAttribute('aria-valuenow', String(Math.round(clamped)));
+        if (currentSeconds !== null && Number.isFinite(currentSeconds)) {
+          scrubberCurrent.textContent = formatClock(currentSeconds);
+        }
+        if (totalSeconds !== null && Number.isFinite(totalSeconds) && totalSeconds > 0) {
+          scrubberTotal.textContent = formatClock(totalSeconds);
+        }
       }
 
       function clearTimers(resetProgress = true) {
@@ -1746,7 +1982,8 @@ function renderApp(url) {
           state.progressTimer = null;
         }
         if (resetProgress) {
-          setProgressValue(0);
+          setProgressValue(0, 0, 0);
+          scrubberTotal.textContent = '0:00';
         }
       }
 
@@ -1758,7 +1995,7 @@ function renderApp(url) {
       }
 
       function playbackBlocked() {
-        return state.paused || state.filtersOpen || reelDetails.open || state.horizontalScrubbing;
+        return state.paused || state.filtersOpen || reelDetails.open || postDetailsDialog.open || state.horizontalScrubbing;
       }
 
       function updatePlaybackButton() {
@@ -1771,6 +2008,7 @@ function renderApp(url) {
         const media = state.currentMedia;
         if (!media || togglePlayback.disabled || state.animationLock) return;
         state.paused = media.tagName === 'VIDEO' ? !media.paused : !state.paused;
+        flashPlaybackIcon(state.paused);
         revealProgress();
         syncPlayback();
       }
@@ -1803,14 +2041,15 @@ function renderApp(url) {
         }, Math.max(0, IMAGE_COUNTDOWN_MS - state.imageElapsed));
         state.progressTimer = setInterval(() => {
           const elapsed = state.imageElapsed + Date.now() - state.imageStartedAt;
-          setProgressValue((elapsed / IMAGE_COUNTDOWN_MS) * 100);
+          setProgressValue((elapsed / IMAGE_COUNTDOWN_MS) * 100, elapsed / 1000, IMAGE_COUNTDOWN_MS / 1000);
         }, 100);
       }
 
       function watchVideoProgress(video) {
         clearTimers(false);
         const update = () => {
-          setProgressValue(video.duration ? video.currentTime / video.duration * 100 : 0);
+          const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+          setProgressValue(dur ? (video.currentTime / dur) * 100 : 0, video.currentTime || 0, dur);
         };
         update();
         state.progressTimer = setInterval(update, 120);
@@ -2079,7 +2318,47 @@ function renderApp(url) {
 
       function updateMeta(post) {
         postCredit.show(post);
-        if (reelDetails.open) postCredit.resolve();
+        if (postDetailsDialog.open) postCredit.resolve();
+
+        const primaryArtist = post.artistText ? post.artistText.split(',')[0].trim() : '';
+        reelAuthorHandle.textContent = primaryArtist ? '@' + primaryArtist : 'Post #' + post.id;
+        reelAuthorLink.href = post.sourceUrl;
+        railSourceLink.href = post.sourceUrl;
+
+        const ratingLabel = post.rating === 's' ? 'Safe' : (post.rating === 'q' ? 'Questionable' : (post.rating === 'e' ? 'Explicit' : ''));
+        const fallbackCaption = [
+          ratingLabel,
+          post.width && post.height ? post.width + '×' + post.height : '',
+          post.ext ? post.ext.toUpperCase() : '',
+        ].filter(Boolean).join(' • ');
+        reelCaption.textContent = post.caption || fallbackCaption;
+
+        const artistSet = new Set(String(post.artistText || '').split(',').map((a) => a.trim().toLowerCase()).filter(Boolean));
+        const displayTags = (post.postTags?.length ? post.postTags : (post.tags || []))
+          .map((t) => String(t).replace(/^artist:/, ''))
+          .filter((t) => t && !artistSet.has(t.toLowerCase()) && !['animated', 'video', 'webm', 'mp4', 'sound'].includes(t))
+          .slice(0, 4);
+        reelHashtags.replaceChildren(...displayTags.map((tag) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'reel-hashtag';
+          btn.textContent = '#' + tag;
+          btn.setAttribute('aria-label', 'Filter feed by ' + tag.replaceAll('_', ' '));
+          btn.addEventListener('click', () => feedFilters.apply({ tags: tag }));
+          return btn;
+        }));
+
+        const heartValue = Number.isFinite(post.favCount) ? post.favCount : post.score;
+        railScoreCount.textContent = formatCompactCount(heartValue);
+        railCommentCount.textContent = Number.isFinite(post.commentCount) ? formatCompactCount(post.commentCount) : 'Info';
+
+        syncSaveButton(post);
+        updateMuteControl();
+
+        if (post.duration > 0) {
+          scrubberTotal.textContent = formatClock(post.duration);
+        }
+
         sortBadge.textContent = (state.mode === 'score' ? 'Top score' : 'Trending') + (state.lastFeedSource === 'client-direct' ? ' • Direct' : '');
         counterBadge.textContent = (state.currentIndex + 1) + ' / ' + state.posts.length;
         tagList.innerHTML = '';
@@ -2216,27 +2495,26 @@ function renderTagSuggestionStyles() {
 function renderFeedFilterStyles() {
   return `
     ${renderTagSuggestionStyles()}
-    .feed-control{min-height:44px;padding:0 13px;border:1px solid #ffffff42;border-radius:12px;background:#16161e;color:#fff;font:600 .85rem system-ui;cursor:pointer}
+    .feed-control{min-height:42px;padding:0 13px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:rgba(20,20,30,.9);color:#fff;font:600 .84rem Inter,system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+    .feed-control:hover{background:rgba(34,34,48,.96);border-color:rgba(255,255,255,.28)}
     .feed-control:focus-visible,.feed-filter-sheet :is(input,select):focus-visible,.tile:focus-visible,#reelDetails summary:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
-    .feed-filter-trigger{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 68px);z-index:60}
-    .feed-filter-sheet{box-sizing:border-box;position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;max-height:90dvh;overflow:auto;color:#fff;background:#15151e;border:1px solid #ffffff30;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));touch-action:pan-y}
-    .feed-filter-sheet::backdrop{background:#0009}.feed-filter-sheet form{display:grid;gap:12px}.feed-filter-sheet header,.feed-filter-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.feed-filter-sheet h2{margin:0;font-size:1.2rem}
-    .feed-filter-sheet label{display:grid;gap:5px;font-size:.88rem}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid #ffffff42;border-radius:10px;background:#0b0b10;color:#fff;padding:8px;font:inherit;font-size:1rem}
+    .feed-filter-sheet{box-sizing:border-box;position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;max-height:90dvh;overflow:auto;color:#fff;background:rgba(15,15,22,.97);border:1px solid rgba(255,255,255,.18);border-radius:22px 22px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));touch-action:pan-y;backdrop-filter:blur(18px)}
+    .feed-filter-sheet::backdrop{background:rgba(0,0,0,.68)}.feed-filter-sheet form{display:grid;gap:12px}.feed-filter-sheet header,.feed-filter-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.feed-filter-sheet h2{margin:0;font-size:1.15rem}
+    .feed-filter-sheet label{display:grid;gap:5px;font-size:.86rem;color:#d6d6e6}.feed-filter-sheet :is(input,select){width:100%;box-sizing:border-box;min-height:44px;border:1px solid rgba(255,255,255,.2);border-radius:11px;background:#0a0a10;color:#fff;padding:8px 10px;font:inherit;font-size:1rem}
     .feed-filter-sheet label[for=feedTags]{margin-bottom:-8px}
-    .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:#ff70aa;color:#170811;border-color:transparent}.feed-filter-sheet p{margin:0;color:#c4c2cb;font-size:.8rem}
-    .lightbox .more-like-trigger{margin-inline-start:10px;pointer-events:auto}
-    .more-like-list{max-height:min(40dvh,20rem);min-width:0;overflow:auto;overscroll-behavior:contain;margin:0;padding:4px 8px;border:1px solid #ffffff30;border-radius:10px}
+    .feed-filter-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.feed-filter-submit{background:linear-gradient(135deg,#ff3e88,#8f7dff);color:#fff;border-color:transparent}.feed-filter-sheet p{margin:0;color:#a8a8be;font-size:.8rem}
+    .lightbox .more-like-trigger,.lightbox .save-photo-btn{pointer-events:auto}
+    .more-like-list{max-height:min(40dvh,20rem);min-width:0;overflow:auto;overscroll-behavior:contain;margin:0;padding:4px 8px;border:1px solid rgba(255,255,255,.18);border-radius:12px}
     .more-like-list legend{padding:0 5px;font-size:.85rem}.more-like-list label{display:flex;align-items:center;gap:9px;min-height:44px;overflow-wrap:anywhere;cursor:pointer}
-    .more-like-list label:has(input:checked){color:#ffd0e4;background:#302030;border-radius:8px}.more-like-list small{margin-left:auto;color:#c4c2cb}
-    .more-like-list input[type=radio]{width:18px;min-height:0;height:18px;flex:none;accent-color:#ff70aa}
+    .more-like-list label:has(input:checked){color:#e2dcff;background:rgba(183,173,255,.18);border-radius:8px}.more-like-list small{margin-left:auto;color:#a8a8be}
+    .more-like-list input[type=radio]{width:18px;min-height:0;height:18px;flex:none;accent-color:#ff3e88}
     .more-like-sheet [data-more-feedback]{min-height:2.5em}.more-like-sheet button:disabled{opacity:.5;cursor:default}
-    .media-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;padding:14px;border-radius:14px;background:#15151ef2;color:#fff;text-align:center;min-width:175px}.media-error p{margin:0 0 8px}.media-error[hidden]{display:none}
+    .media-error{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;padding:14px;border-radius:16px;background:rgba(15,15,22,.95);border:1px solid rgba(255,255,255,.16);color:#fff;text-align:center;min-width:175px}.media-error p{margin:0 0 8px}.media-error[hidden]{display:none}
   `;
 }
 
 function renderFeedFilters() {
-  return `<button type="button" class="feed-control feed-filter-trigger" id="openFeedFilters" aria-haspopup="dialog">Filters</button>
-    <dialog class="feed-filter-sheet" id="feedFilters" aria-labelledby="feedFiltersTitle">
+  return `<dialog class="feed-filter-sheet" id="feedFilters" aria-labelledby="feedFiltersTitle">
       <form><header><h2 id="feedFiltersTitle">Feed filters</h2><button type="button" class="feed-control" data-close-filters>Close</button></header>
         <label for="feedTags">Tags</label><div><input id="feedTags" name="tags" autocomplete="off" placeholder="Search by tags"/></div>
         <div class="feed-filter-row"><label>Rating<select name="rating"><option value="">Any rating</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label>
@@ -2249,7 +2527,7 @@ function renderFeedFilters() {
 }
 
 function renderMoreLikeThisButton() {
-  return '<button type="button" class="feed-control more-like-trigger" id="openMoreLikeThis" aria-haspopup="dialog">More like this</button>';
+  return '<button type="button" class="feed-control more-like-trigger" id="openMoreLikeThis" aria-haspopup="dialog">Similar</button>';
 }
 
 function renderMoreLikeThisDialog() {
@@ -2266,13 +2544,31 @@ function renderMoreLikeThisDialog() {
 
 function renderPhotoGridPage(url) {
   const skeletonTiles = '<div class="tile skeleton" aria-hidden="true"></div>'.repeat(12);
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photo Grid | e621 Reels</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Photos | FurryReel</title>
+  <meta name="theme-color" content="#07070b"/>
   <link rel="preconnect" href="https://e621.net" crossorigin/><link rel="preconnect" href="https://static1.e621.net"/>
-  <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}"/><link rel="modulepreload" href="${clientAssetUrl('photo-feed.js')}"/>
-  <style>body{margin:0;background:#070707;color:#fff;font-family:Inter,system-ui,sans-serif}.frame{min-height:100dvh;max-width:1240px;margin:0 auto;background:#09090d;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08)}.global-header{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:12px 16px;background:rgba(12,12,14,.94);border-bottom:1px solid rgba(255,255,255,.08);backdrop-filter:blur(10px)}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}body.page-transitioning{opacity:0;transition:opacity .22s ease}.status{padding:10px 14px;color:#bbb;font-size:.92rem}.error{margin:0 10px 14px;padding:10px;border:1px solid rgba(255,120,120,.45);border-radius:10px;background:rgba(255,70,70,.08);color:#ffc8c8;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px}.tile{background:#101014;border-radius:10px;overflow:hidden;aspect-ratio:1/1;cursor:pointer}.tile img{width:100%;height:100%;object-fit:cover;display:block}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox[open]{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.swipe-arrow{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:30px;line-height:1;color:rgba(255,255,255,.42);user-select:none;pointer-events:none}.swipe-arrow.left{left:12px}.swipe-arrow.right{right:12px}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:58px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.82));font-size:.92rem;z-index:2}.credit a{color:#fff}
-  .error[hidden]{display:none}.tile.skeleton{cursor:default;background:linear-gradient(100deg,#101014 30%,#1b1b22 50%,#101014 70%);background-size:300% 100%;animation:tile-shimmer 1.3s linear infinite}@keyframes tile-shimmer{from{background-position:100% 0}to{background-position:0 0}}@media (prefers-reduced-motion:reduce){.tile.skeleton{animation:none}}.tile.broken{display:grid;place-items:center;color:rgba(255,255,255,.45);font-size:.8rem}.tile.broken::after{content:'Image unavailable'}.retry-btn{display:block;margin-top:8px;border:1px solid rgba(255,255,255,.3);background:#1a1a24;color:#fff;border-radius:8px;padding:6px 12px;font:600 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer}.retry-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+  <link rel="modulepreload" href="${clientAssetUrl('e621-client.js')}"/><link rel="modulepreload" href="${clientAssetUrl('photo-feed.js')}"/><link rel="modulepreload" href="${clientAssetUrl('saved-posts.js')}"/>
+  <style>
+  body{margin:0;background:radial-gradient(circle at top,#151424 0%,#06060a 48%);color:#f7f7fb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+  .frame{min-height:100dvh;max-width:1180px;margin:0 auto;background:rgba(9,9,14,.78);border-left:1px solid rgba(255,255,255,.07);border-right:1px solid rgba(255,255,255,.07);padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  ${renderBottomNavStyles()}
+  ${renderFeedTopBarStyles()}
+  ${renderToastStyles()}
+  .status{padding:10px 14px;color:#9e9eb4;font-size:.88rem}.error{margin:0 12px 14px;padding:12px;border:1px solid rgba(255,90,120,.45);border-radius:14px;background:rgba(255,62,136,.1);color:#ffd0de;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(156px,1fr));gap:10px;padding:10px 12px}
+  @media(min-width:640px){.grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}}
+  .tile-wrap{position:relative;border-radius:14px;overflow:hidden;background:#12121a;border:1px solid rgba(255,255,255,.08);aspect-ratio:1/1}
+  .tile{width:100%;height:100%;background:#12121a;border-radius:14px;overflow:hidden;aspect-ratio:1/1;cursor:pointer;display:block}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block}
+  .tile-save-btn{position:absolute;top:7px;right:7px;z-index:2;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(10,10,16,.72);color:#e8e8f4;display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(8px);transition:background .14s ease,color .14s ease,border-color .14s ease}
+  .tile-save-btn:hover{background:rgba(28,28,40,.92)}
+  .tile-save-btn.saved{color:#ff3e88;border-color:rgba(255,62,136,.5);background:rgba(255,62,136,.2)}
+  .tile-save-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:50;display:none;overflow:hidden;touch-action:none}.lightbox[open]{display:block}.lightbox-track{position:absolute;inset:0;display:flex;transform:translate3d(0,0,0);will-change:transform}.lightbox-track.animating{transition:transform 280ms cubic-bezier(.2,.7,.2,1)}.lightbox-slide{flex:0 0 100%;width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:20px 0 90px}.lightbox-slide img{width:100%;height:auto;max-height:none;object-fit:contain;display:block}.down-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:68px;z-index:2;font-size:22px;color:rgba(255,255,255,.45);display:none;pointer-events:none}.down-hint.show{display:block}.credit{position:absolute;left:0;right:0;bottom:0;padding:14px 16px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.88));font-size:.9rem;z-index:2;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}.credit a{color:#b7adff}.credit-actions{display:flex;align-items:center;gap:8px;pointer-events:auto}
+  .save-photo-btn.saved{color:#ff3e88;border-color:rgba(255,62,136,.55);background:rgba(255,62,136,.18)}
+  .error[hidden]{display:none}.tile.skeleton{cursor:default;background:linear-gradient(100deg,#12121a 30%,#1d1d2a 50%,#12121a 70%);background-size:300% 100%;animation:tile-shimmer 1.3s linear infinite}@keyframes tile-shimmer{from{background-position:100% 0}to{background-position:0 0}}@media (prefers-reduced-motion:reduce){.tile.skeleton{animation:none}}.tile.broken{display:grid;place-items:center;color:rgba(255,255,255,.45);font-size:.8rem}.tile.broken::after{content:'Image unavailable'}.retry-btn{display:block;margin-top:8px;border:1px solid rgba(255,255,255,.3);background:#1a1a24;color:#fff;border-radius:8px;padding:6px 12px;font:600 12px/1.2 Inter,system-ui,sans-serif;cursor:pointer}.retry-btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
   ${renderFeedFilterStyles()}
-  html{scrollbar-gutter:stable}.frame{padding-top:64px}.tile:not(.skeleton){padding:0;border:0;color:#fff;min-width:0}
+  html{scrollbar-gutter:stable}.tile:not(.skeleton){padding:0;border:0;color:#fff;min-width:0}
   .lightbox{box-sizing:border-box;margin:0;padding:0;border:0;width:100%;height:100%;max-width:none;max-height:none;color:#fff;touch-action:pan-y}
   .lightbox::backdrop{background:#000}.lightbox-slide{position:relative;box-sizing:border-box;display:grid;align-items:safe center;overscroll-behavior:contain;touch-action:pan-y}
   .lightbox-slide img[hidden]{display:none}.lightbox-slide img{background-position:center;background-repeat:no-repeat;background-size:contain}
@@ -2281,7 +2577,7 @@ function renderPhotoGridPage(url) {
   .photo-empty{margin:0 14px 14px}.photo-empty[hidden]{display:none}
   @media(prefers-reduced-motion:reduce){.lightbox-track.animating,body.page-transitioning{transition:none}}
   </style></head>
-  <body>${renderFloatingNav('photos')}${renderFeedFilters()}<div class="frame"><main class="grid" id="grid" aria-busy="true">${skeletonTiles}</main>
+  <body>${renderFeedFilters()}<div class="frame">${renderFeedTopBar({ sticky: true })}<main class="grid" id="grid" aria-busy="true">${skeletonTiles}</main>
   <div class="status" id="status" role="status" aria-live="polite">Loading photos…</div><div class="error" id="errorBox" role="alert" hidden><span id="errorText"></span><button type="button" class="retry-btn" id="retryButton">Try again</button></div>
   <button type="button" class="feed-control photo-empty" id="emptyPhotoFilters" hidden>Edit filters</button></div>
   <dialog class="lightbox" id="lightbox" aria-label="Photo viewer">
@@ -2289,15 +2585,43 @@ function renderPhotoGridPage(url) {
     <button type="button" class="feed-control lightbox-nav lightbox-prev" id="previousPhoto" aria-label="Previous photo">‹</button>
     <button type="button" class="feed-control lightbox-nav lightbox-next" id="nextPhoto" aria-label="Next photo">›</button>
     <div class="down-hint" id="downHint" aria-hidden="true">⌄⌄</div><div class="lightbox-track" id="lightboxTrack"></div>
-    <div class="credit"><span id="lightboxCredit"></span>${renderMoreLikeThisButton()}</div>
+    <div class="credit"><span id="lightboxCredit"></span><div class="credit-actions"><button type="button" class="feed-control save-photo-btn" id="saveLightboxPhoto" aria-pressed="false">${ICONS.bookmarkOutline}<span>Save</span></button>${renderMoreLikeThisButton()}</div></div>
   </dialog>
+  <div class="fr-toast" id="frToast" role="status" aria-live="polite"></div>
   ${renderMoreLikeThisDialog()}
-  <script>${renderFloatingNavScript()}</script><script type="module">
+  ${renderBottomNav('photos')}
+  <script>${renderBottomNavScript()}</script><script type="module">
 import { getBrowserClient, describeApiError } from '${clientAssetUrl('e621-client.js')}';
 import { createPhotoFeed, photoTagsFromSettings, PHOTO_PAGE_SIZE } from '${clientAssetUrl('photo-feed.js')}';
+import { getSavedStore } from '${clientAssetUrl('saved-posts.js')}';
 import { bindFeedFilters } from '${clientAssetUrl('feed-filters.js')}';
 import { bindPostCredit } from '${clientAssetUrl('post-credit.js')}';
 import { bindMoreLikeThis } from '${clientAssetUrl('more-like-this.js')}';
+
+const savedStore = getSavedStore();
+const ICON_BOOKMARK_OUTLINE = ${JSON.stringify(ICONS.bookmarkOutline)};
+const ICON_BOOKMARK_FILLED = ${JSON.stringify(ICONS.bookmarkFilled)};
+const saveLightboxPhoto = document.getElementById('saveLightboxPhoto');
+const frToast = document.getElementById('frToast');
+let toastTimer = null;
+function showToast(msg) {
+  frToast.textContent = msg;
+  frToast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => frToast.classList.remove('show'), 2000);
+}
+function updateTileSaveBtn(btn, saved) {
+  btn.classList.toggle('saved', saved);
+  btn.setAttribute('aria-pressed', String(saved));
+  btn.setAttribute('aria-label', saved ? 'Remove photo from Saved' : 'Save photo');
+  btn.innerHTML = saved ? ICON_BOOKMARK_FILLED : ICON_BOOKMARK_OUTLINE;
+}
+function syncLightboxSaveBtn(post) {
+  const saved = Boolean(post) && savedStore.has(post.id);
+  saveLightboxPhoto.classList.toggle('saved', saved);
+  saveLightboxPhoto.setAttribute('aria-pressed', String(saved));
+  saveLightboxPhoto.innerHTML = (saved ? ICON_BOOKMARK_FILLED : ICON_BOOKMARK_OUTLINE) + '<span>' + (saved ? 'Saved' : 'Save') + '</span>';
+}
 
 const grid = document.getElementById('grid');
 const status = document.getElementById('status');
@@ -2451,6 +2775,8 @@ function renderTiles(posts) {
   const fragment = document.createDocumentFragment();
   posts.forEach((post) => {
     const postIndex = allPosts.push(post) - 1;
+    const wrap = document.createElement('div');
+    wrap.className = 'tile-wrap';
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'tile';
@@ -2469,7 +2795,20 @@ function renderTiles(posts) {
       image.remove();
       tile.classList.add('broken');
     });
-    fragment.appendChild(tile);
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'tile-save-btn';
+    saveBtn.dataset.savePostId = String(post.id);
+    updateTileSaveBtn(saveBtn, savedStore.has(post.id));
+    saveBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const res = savedStore.toggle(post, 'photo');
+      updateTileSaveBtn(saveBtn, res.saved);
+      window.dispatchEvent(new CustomEvent('fr:saved-changed'));
+      showToast(res.saved ? (res.persisted ? 'Saved to your library' : 'Saved for this session') : 'Removed from Saved');
+    });
+    wrap.append(tile, saveBtn);
+    fragment.appendChild(wrap);
   });
   grid.appendChild(fragment);
   if (lightbox.open) nextPhoto.disabled = lightboxIndex >= allPosts.length - 1;
@@ -2699,7 +3038,28 @@ function renderLightboxAt(index) {
   setLightboxTrack(lightboxBaseX, false);
   photoCredit.show(current);
   photoCredit.resolve();
+  syncLightboxSaveBtn(current);
 }
+
+saveLightboxPhoto.addEventListener('click', () => {
+  const post = allPosts[lightboxIndex];
+  if (!post) return;
+  const res = savedStore.toggle(post, 'photo');
+  syncLightboxSaveBtn(post);
+  const tileBtn = grid.querySelector('.tile-save-btn[data-save-post-id="' + post.id + '"]');
+  if (tileBtn) updateTileSaveBtn(tileBtn, res.saved);
+  window.dispatchEvent(new CustomEvent('fr:saved-changed'));
+  showToast(res.saved ? (res.persisted ? 'Saved to your library' : 'Saved for this session') : 'Removed from Saved');
+});
+
+savedStore.subscribe(() => {
+  grid.querySelectorAll('.tile-save-btn[data-save-post-id]').forEach((btn) => {
+    updateTileSaveBtn(btn, savedStore.has(Number(btn.dataset.savePostId)));
+  });
+  if (lightbox.open && allPosts[lightboxIndex]) {
+    syncLightboxSaveBtn(allPosts[lightboxIndex]);
+  }
+});
 
 function openLightbox(index, tile) {
   if (index < 0 || index >= allPosts.length) return;
@@ -2807,30 +3167,44 @@ pump();
 }
 
 function renderSettingsPage(url) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | e621 Reels</title><style>body.settings-page{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.settings-page .fr-nav-fallback{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:55;padding:8px;border-radius:10px;background:rgba(12,12,18,.92);border:1px solid rgba(255,255,255,.18)}.settings-page .fr-nav-fallback a{color:#fff;text-decoration:none;padding:8px 10px;border-radius:8px}.settings-page .fr-nav-fallback[hidden]{display:none}.settings-page .settings-shell{max-width:920px;margin:72px auto 20px;display:grid;gap:14px}.settings-page .settings-card{border:1px solid rgba(255,255,255,.16);border-radius:16px;background:#14141b;padding:16px}label{display:grid;gap:6px;margin-bottom:10px}input,select,button{font:inherit}input,select{background:#0e0e13;color:#fff;border:1px solid rgba(255,255,255,.2);padding:10px;border-radius:10px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-actions{display:flex;gap:10px;flex-wrap:wrap}.btn{border:1px solid rgba(255,255,255,.2);background:#1a1a24;color:#fff;border-radius:10px;padding:10px 12px;cursor:pointer}.primary{background:linear-gradient(135deg,#ff4d98,#ff7b4d);border:none}a{color:#ff73af}${renderTagSuggestionStyles()}</style></head><body class="settings-page">${renderFloatingNav('settings')}<main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search and filters</h2><label for="sharedTags">Tags/search query</label><div><input id="sharedTags" autocomplete="off" placeholder="e.g. fox forest"/></div><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels settings</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos settings</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Privacy/display settings</h2><label><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history. <a href="/privacy" data-page-nav>Read privacy policy</a>.</p></section><div class="settings-actions"><button class="btn primary" type="submit">Save & Apply</button><a class="btn" href="/" data-page-nav>View Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main><script>${renderFloatingNavScript()}</script><script type="module">import { bindTagAutocomplete } from '${clientAssetUrl('tag-autocomplete.js')}';const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Settings | FurryReel</title><meta name="theme-color" content="#07070b"/><style>
+  *{box-sizing:border-box}
+  body.settings-page{margin:0;background:radial-gradient(circle at top,#151424 0%,#06060a 48%);color:#f7f7fb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;padding:max(18px,env(safe-area-inset-top,0px)) 16px calc(92px + env(safe-area-inset-bottom,0px));min-height:100dvh}
+  ${renderBottomNavStyles()}
+  .settings-page .settings-shell{max-width:780px;margin:0 auto;display:grid;gap:14px}
+  .settings-page h1{margin:4px 0 6px;font-size:1.5rem;letter-spacing:-.02em}
+  .settings-page h2{margin:0 0 12px;font-size:1.02rem;color:#e8e6f8}
+  .settings-page .settings-card{border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(18,18,26,.86);padding:16px;margin-bottom:12px}
+  label{display:grid;gap:6px;margin-bottom:10px;font-size:.86rem;color:#c8c8dc}
+  .check-label{display:flex;align-items:center;gap:10px;color:#f7f7fb;cursor:pointer}
+  .check-label input{width:18px;height:18px;accent-color:#ff3e88}
+  input,select,button{font:inherit}
+  input:not([type="checkbox"]),select{width:100%;background:#0a0a10;color:#fff;border:1px solid rgba(255,255,255,.18);padding:10px 12px;border-radius:11px;min-height:42px}
+  input:focus-visible,select:focus-visible,.btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:520px){.row{grid-template-columns:1fr}}
+  .settings-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{border:1px solid rgba(255,255,255,.16);background:rgba(24,24,36,.92);color:#fff;border-radius:11px;padding:10px 14px;min-height:42px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:.86rem}
+  .btn:hover{background:rgba(38,38,54,.96);border-color:rgba(255,255,255,.28)}
+  .btn--danger{color:#ff9cb8;border-color:rgba(255,62,136,.35)}
+  .primary{background:linear-gradient(135deg,#ff3e88,#8c78ff);border:none;color:#fff}
+  p{color:#9e9eb4;font-size:.84rem;line-height:1.45;margin:6px 0 10px}
+  a{color:#b7adff}
+  ${renderTagSuggestionStyles()}
+  </style></head><body class="settings-page"><main class="settings-shell"><h1>Settings</h1><form id="settingsForm"><section class="settings-card"><h2>Shared search &amp; filters</h2><label for="sharedTags">Tags / search query</label><div><input id="sharedTags" autocomplete="off" placeholder="e.g. fox forest"/></div><div class="row"><label>Sort mode<select id="sharedSort"><option value="trending">Trending</option><option value="score">Top scored</option></select></label><label>Rating<select id="sharedRating"><option value="">Any</option><option value="s">Safe</option><option value="q">Questionable</option><option value="e">Explicit</option></select></label></div><div class="row"><label>Aspect ratio<select id="sharedRatio"><option value="">Any</option><option value="vertical">Vertical</option><option value="landscape">Landscape</option></select></label><label>Exclude tags (optional)<input id="sharedExclude" placeholder="tag1 tag2"/></label></div><button class="btn" type="button" id="resetShared">Reset shared filters</button></section><section class="settings-card"><h2>Reels playback</h2><div class="row"><label>Media fit<select id="reelsFit"><option value="cover">Fullscreen / cover</option><option value="contain">Contain</option></select></label><label>Default mute<select id="reelsMute"><option value="true">Muted</option><option value="false">Unmuted</option></select></label></div><div class="settings-actions"><button class="btn" type="button" id="resetOnboarding">Show quick controls again</button><button class="btn" type="button" id="resetReels">Reset Reels settings</button></div></section><section class="settings-card"><h2>Photos grid</h2><div class="row"><label>Grid density<select id="photosDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label><label>Image fit<select id="photosFit"><option value="crop">Crop</option><option value="contain">Contain</option></select></label></div><button class="btn" type="button" id="resetPhotos">Reset Photos settings</button></section><section class="settings-card"><h2>Saved library (local only)</h2><p id="savedSummaryText">Saved posts stay strictly in this browser's local storage and are never sent to a server or stored in HTTP cookies.</p><div class="settings-actions"><a class="btn" href="/saved" data-page-nav>Open Saved</a><button class="btn btn--danger" type="button" id="clearSavedFromSettings">Clear all saved</button></div></section><section class="settings-card"><h2>Privacy &amp; display</h2><label class="check-label"><input type="checkbox" id="syncUrl"/> Sync filters to URL for sharing</label><p>When enabled, tags/filters can appear in your URL and browser history.</p><div class="settings-actions"><a class="btn" href="/privacy" data-page-nav>Privacy Policy</a><a class="btn" href="/about" data-page-nav>About FurryReel</a></div></section><div class="settings-actions"><button class="btn primary" type="submit">Save &amp; Apply</button><a class="btn" href="/" data-page-nav>Back to Reels</a><a class="btn" href="/photos" data-page-nav>View Photos</a></div></form></main>${renderBottomNav('settings')}<script>${renderBottomNavScript()}</script><script type="module">import { bindTagAutocomplete } from '${clientAssetUrl('tag-autocomplete.js')}';import { getSavedStore } from '${clientAssetUrl('saved-posts.js')}';const savedStore=getSavedStore();const DEFAULTS={shared:{tags:'',sort:'trending',rating:'',ratio:'',syncUrl:true,excludeTags:''},reels:{fitMedia:true,muted:true,onboardingSeen:false},photos:{gridDensity:'comfortable',fitImages:'crop'}};/* Loads saved settings with safe defaults. */function loadSettings(){try{const p=JSON.parse(localStorage.getItem('fr_settings_v1')||'{}');return {...DEFAULTS,...p,shared:{...DEFAULTS.shared,...(p.shared||{})},reels:{...DEFAULTS.reels,...(p.reels||{})},photos:{...DEFAULTS.photos,...(p.photos||{})}}}catch{return structuredClone(DEFAULTS)}}/* Saves one canonical settings object for all pages. */function saveSettings(settings){localStorage.setItem('fr_settings_v1',JSON.stringify(settings))}/* Lets SEO URL params override defaults when present. */function mergeUrlParamsIntoSettings(settings,url){const m=url.searchParams.get('mode');const t=(url.searchParams.get('tags')||'').trim();const r=(url.searchParams.get('rating')||'').trim().toLowerCase();const ra=(url.searchParams.get('ratio')||'').trim().toLowerCase();if(m==='score'||m==='trending')settings.shared.sort=m;if(t)settings.shared.tags=t;if(['s','q','e'].includes(r))settings.shared.rating=r;if(['vertical','landscape'].includes(ra))settings.shared.ratio=ra;return settings}/* Builds shareable URLs using current shared filters. */function applySettingsToUrl(settings,targetPath){const u=new URL(location.origin+targetPath);if(settings.shared.sort==='score')u.searchParams.set('mode','score');if(settings.shared.tags)u.searchParams.set('tags',settings.shared.tags);if(settings.shared.rating)u.searchParams.set('rating',settings.shared.rating);if(settings.shared.ratio)u.searchParams.set('ratio',settings.shared.ratio);return u.toString()}/* Reset helpers keep each section independent. */function resetSharedSettings(s){s.shared={...DEFAULTS.shared}}function resetReelsSettings(s){s.reels={...DEFAULTS.reels}}function resetPhotosSettings(s){s.photos={...DEFAULTS.photos}}let settings=mergeUrlParamsIntoSettings(loadSettings(),new URL(location.href));const q=(id)=>document.getElementById(id);function bind(){q('sharedTags').value=settings.shared.tags||'';q('sharedSort').value=settings.shared.sort||'trending';q('sharedRating').value=settings.shared.rating||'';q('sharedRatio').value=settings.shared.ratio||'';q('sharedExclude').value=settings.shared.excludeTags||'';q('reelsFit').value=settings.reels.fitMedia?'contain':'cover';q('reelsMute').value=String(settings.reels.muted!==false);q('photosDensity').value=settings.photos.gridDensity||'comfortable';q('photosFit').value=settings.photos.fitImages||'crop';q('syncUrl').checked=settings.shared.syncUrl!==false}bind();
+function updateSavedSummary(){const c=savedStore.count();q('savedSummaryText').textContent=c+' post'+(c===1?'':'s')+' saved locally in this browser. Saved posts stay strictly in local storage (never in HTTP cookies and never sent to a server).';q('clearSavedFromSettings').disabled=c===0;}updateSavedSummary();q('clearSavedFromSettings').onclick=()=>{if(!window.confirm('Clear all saved posts from this browser?'))return;savedStore.clear();window.dispatchEvent(new CustomEvent('fr:saved-changed'));updateSavedSummary();};
 const closeTagSuggestions = bindTagAutocomplete(q('sharedTags'));
 q('resetShared').onclick=()=>{closeTagSuggestions();resetSharedSettings(settings);bind()};q('resetReels').onclick=()=>{resetReelsSettings(settings);bind()};q('resetPhotos').onclick=()=>{resetPhotosSettings(settings);bind()};q('resetOnboarding').onclick=()=>{settings.reels.onboardingSeen=false;saveSettings(settings)};q('settingsForm').addEventListener('submit',(e)=>{e.preventDefault();settings.shared.tags=q('sharedTags').value.trim();settings.shared.sort=q('sharedSort').value;settings.shared.rating=q('sharedRating').value;settings.shared.ratio=q('sharedRatio').value;settings.shared.excludeTags=q('sharedExclude').value.trim();settings.reels.fitMedia=q('reelsFit').value==='contain';settings.reels.muted=q('reelsMute').value==='true';settings.photos.gridDensity=q('photosDensity').value;settings.photos.fitImages=q('photosFit').value;settings.shared.syncUrl=q('syncUrl').checked;saveSettings(settings);const from=new URLSearchParams(location.search).get('from');if(from==='photos'){location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/photos'):'/photos';return;}location.href=settings.shared.syncUrl?applySettingsToUrl(settings,'/'):'/';});</script></body></html>`;
 }
 
 function renderAboutPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}a{color:#ff73af}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}p{line-height:1.55}body.page-transitioning{opacity:0;transition:opacity .22s ease}</style></head><body>${renderFloatingNav('about')}<div class="card"><h1>About this app</h1><p>This site is 100% AI-coded and built as an open source experiment. The purpose of the project is to explore what can be made with AI-assisted development, while keeping the result transparent, reusable and freely available.</p><p>I do not claim ownership over the underlying AI-generated code, third-party APIs, external services, or any platform data used by this site. This project is intended to be used as a learning resource, source reference, template, remix, or starting point for anyone who wants to build something similar. My view is that if something is made entirely through AI-generated code, it should be shared freely for public use and the general good.</p><p>That said, this position does not extend to AI-generated art. I believe AI-generated art is harmful, disrespectful to working artists, and a stain on creative communities globally. Code and technical scaffolding can be freely shared and reused; the exploitation of artists’ work without consent is a separate issue and should be treated with serious criticism.</p><p>This project is 100% open source. You are free to inspect it, learn from it, fork it, modify it, improve it, or use it as a base for your own work. View the source on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p><p>Use the burger menu on each page to switch between Reels, Photos, and this About page.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>About | FurryReel</title><meta name="theme-color" content="#07070b"/><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#151424 0%,#06060a 48%);color:#f7f7fb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;padding:20px 16px calc(92px + env(safe-area-inset-bottom,0px));min-height:100dvh}${renderBottomNavStyles()}a{color:#b7adff}.card{max-width:820px;margin:12px auto;padding:24px;border:1px solid rgba(255,255,255,.12);border-radius:20px;background:rgba(18,18,26,.88)}p{line-height:1.6;color:#d6d6e6}</style></head><body><div class="card"><h1>About this app</h1><p>This site is 100% AI-coded and built as an open source experiment. The purpose of the project is to explore what can be made with AI-assisted development, while keeping the result transparent, reusable and freely available.</p><p>I do not claim ownership over the underlying AI-generated code, third-party APIs, external services, or any platform data used by this site. This project is intended to be used as a learning resource, source reference, template, remix, or starting point for anyone who wants to build something similar. My view is that if something is made entirely through AI-generated code, it should be shared freely for public use and the general good.</p><p>That said, this position does not extend to AI-generated art. I believe AI-generated art is harmful, disrespectful to working artists, and a stain on creative communities globally. Code and technical scaffolding can be freely shared and reused; the exploitation of artists’ work without consent is a separate issue and should be treated with serious criticism.</p><p>This project is 100% open source. You are free to inspect it, learn from it, fork it, modify it, improve it, or use it as a base for your own work. View the source on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p><p>Use the bottom navigation bar to switch between Reels, Photos, Saved, and Settings.</p></div>${renderBottomNav('about')}<script>${renderBottomNavScript()}</script></body></html>`;
 }
-
-
-
 
 const PRIVACY_CONTACT_EMAIL = 'owo_pounces_on@proton.me';
 
 function renderPrivacyPage() {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | e621 Reels</title><style>body{margin:0;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:20px}.global-header{display:flex;justify-content:flex-end;position:sticky;top:0;z-index:30}.global-menu-toggle{border:1px solid rgba(255,255,255,.16);background:#111;color:#fff;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;cursor:pointer}.global-drawer{position:fixed;right:0;top:0;bottom:0;width:min(80vw,290px);display:grid;gap:6px;padding:82px 12px 20px;background:#141418;border-left:1px solid rgba(255,255,255,.18);transform:translateX(110%);transition:transform .22s ease;z-index:40}.global-drawer.open{transform:translateX(0)}.global-drawer a{color:#fff;text-decoration:none;padding:10px 12px;border-radius:10px}.global-drawer a:hover{background:rgba(255,255,255,.08)}.card{max-width:860px;margin:40px auto;padding:24px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:#14141b}h2{margin-top:24px}p,li{line-height:1.55}a{color:#ff73af}code{font-family:ui-monospace,Menlo,Consolas,monospace}body.page-transitioning{opacity:0;transition:opacity .22s ease}.updated{opacity:.8;font-size:.92rem}</style></head><body>${renderFloatingNav('privacy')}<div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-10-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker serves app shell assets (HTML/CSS/JS) and does not proxy those content API requests in normal operation.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy. For media and API requests, your browser sends e621 only this site's origin as the referrer (for example <code>https://furryreel.com/</code>), not the page path or your search tags, because e621's media servers refuse requests that carry no referrer at all.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><p>To avoid asking e621 for the same content twice, recently loaded e621 results and tag suggestions are kept in your browser's session storage for the current tab (cleared when the tab closes, and not used after one hour). Your settings, and a request-timing value that lets open tabs share e621's rate limit, are kept in your browser's local storage. None of this is sent to the site operator.</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div><script>${renderFloatingNavScript()}</script></body></html>`;
-}
-
-function renderFloatingNav(activePage) {
-  return `<nav class="fr-nav-fallback" aria-label="Primary"><a href="/"${activePage === 'reels' ? ' aria-current="page"' : ''}>Reels</a><a href="/photos"${activePage === 'photos' ? ' aria-current="page"' : ''}>Photos</a><a href="/settings"${activePage === 'settings' ? ' aria-current="page"' : ''}>Settings</a><a href="/about"${activePage === 'about' ? ' aria-current="page"' : ''}>About</a><a href="/privacy"${activePage === 'privacy' ? ' aria-current="page"' : ''}>Privacy</a></nav><fr-floating-nav data-active="${activePage}"></fr-floating-nav>`;
-}
-
-function renderFloatingNavScript() {
-  return `(() => {if (customElements.get('fr-floating-nav')) return;class FrFloatingNav extends HTMLElement {connectedCallback() {const active = this.getAttribute('data-active') || '';const shadow = this.attachShadow({ mode: 'open' });shadow.innerHTML = \`<style>:host{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 12px);z-index:60}.fr-floating-nav__btn{width:46px;height:46px;border-radius:12px;border:1px solid rgba(255,255,255,.24);background:rgba(16,16,22,.82);color:#fff;cursor:pointer;font:600 22px/1 system-ui}.fr-floating-nav__btn:focus-visible{outline:2px solid #ffd36b;outline-offset:2px}.fr-floating-nav__panel{position:absolute;top:54px;right:0;min-width:180px;padding:8px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(12,12,18,.96);backdrop-filter:blur(10px);display:none;box-shadow:0 14px 36px rgba(0,0,0,.44)}.fr-floating-nav__panel[aria-hidden="false"]{display:grid;gap:4px}.fr-floating-nav__link{text-decoration:none;color:#fff;padding:10px 12px;border-radius:10px;font:500 14px/1.3 Inter,system-ui,sans-serif}.fr-floating-nav__link:hover,.fr-floating-nav__link:focus-visible{background:rgba(255,255,255,.1);outline:none}.fr-floating-nav__link[data-current="true"]{background:rgba(255,47,120,.2);border:1px solid rgba(255,47,120,.45)}@media (min-width:760px){.fr-floating-nav__btn{width:42px;height:42px}}</style><button type="button" class="fr-floating-nav__btn" aria-expanded="false" aria-label="Open navigation menu">☰</button><div class="fr-floating-nav__panel" aria-hidden="true" role="menu"><a class="fr-floating-nav__link" href="/" data-link="reels">Reels</a><a class="fr-floating-nav__link" href="/photos" data-link="photos">Photos</a><a class="fr-floating-nav__link" href="/settings" data-link="settings">Settings</a><a class="fr-floating-nav__link" href="/about" data-link="about">About</a><a class="fr-floating-nav__link" href="/privacy" data-link="privacy">Privacy</a></div>\`;const btn=shadow.querySelector('.fr-floating-nav__btn');const panel=shadow.querySelector('.fr-floating-nav__panel');shadow.querySelectorAll('.fr-floating-nav__link').forEach((link)=>{if(link.getAttribute('data-link')===active){link.setAttribute('data-current','true');link.setAttribute('aria-current','page');}});const close=()=>{panel.setAttribute('aria-hidden','true');btn.setAttribute('aria-expanded','false');};const open=()=>{panel.setAttribute('aria-hidden','false');btn.setAttribute('aria-expanded','true');};btn.addEventListener('click',(e)=>{e.stopPropagation();(panel.getAttribute('aria-hidden')==='true')?open():close();});shadow.addEventListener('keydown',(e)=>{if(e.key==='Escape')close();});document.addEventListener('click',(e)=>{if(!e.composedPath().includes(this))close();});shadow.querySelectorAll('.fr-floating-nav__link').forEach((anchor)=>anchor.addEventListener('click',(event)=>{if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();close();const href=anchor.href;if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){window.location.href=href;return;}if(document.startViewTransition){document.startViewTransition(()=>{window.location.href=href;});return;}window.location.href=href;}));const fallback=document.querySelector('.fr-nav-fallback');if(fallback)fallback.setAttribute('hidden','hidden');}}customElements.define('fr-floating-nav', FrFloatingNav);})();`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Privacy Policy | FurryReel</title><meta name="theme-color" content="#07070b"/><style>*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#151424 0%,#06060a 48%);color:#f7f7fb;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;padding:20px 16px calc(92px + env(safe-area-inset-bottom,0px));min-height:100dvh}${renderBottomNavStyles()}.card{max-width:820px;margin:12px auto;padding:24px;border:1px solid rgba(255,255,255,.12);border-radius:20px;background:rgba(18,18,26,.88)}h2{margin-top:24px;font-size:1.08rem}p,li{line-height:1.6;color:#d6d6e6}a{color:#b7adff}code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e8e2ff}.updated{opacity:.8;font-size:.9rem}</style></head><body><div class="card"><h1>Privacy Policy</h1><p class="updated"><strong>Effective date:</strong> 2026-11-26</p><p>This Privacy Policy explains how this site handles information. It is written for risk reduction and transparency, not as a promise of complete legal compliance.</p><h2>Operator and contact</h2><p>This deployment is operated by an independent site operator. Contact: <a href="mailto:${PRIVACY_CONTACT_EMAIL}">${PRIVACY_CONTACT_EMAIL}</a>.</p><h2>Plain-language summary</h2><ul><li>No user accounts.</li><li>No first-party analytics SDK.</li><li>No ads.</li><li>No intentional sale/share of personal information.</li><li>No intentional user-profile database.</li><li>Uses third-party e621 API/content/media and Cloudflare infrastructure.</li></ul><h2>Who controls this site</h2><p>e621 Reels is an independent viewer interface. The operator of this deployment is the data controller only for information directly processed by this site.</p><h2>Data this site intentionally does not collect</h2><ul><li>No user accounts.</li><li>No first-party analytics SDKs or ad trackers.</li><li>No intentional sale of personal information.</li><li>No intentional storage of sensitive personal profile data.</li></ul><h2>How requests work</h2><ul><li>Reels, photos, and tag autocomplete are requested directly from <code>https://e621.net</code> from your browser.</li><li>The Cloudflare Worker serves app shell assets (HTML/CSS/JS) and does not proxy those content API requests in normal operation.</li></ul><h2>Third-party processing</h2><p>When you load content, your browser communicates directly with e621. e621 may receive and process standard request metadata such as IP address, user agent, referrer, and query tags according to their own terms and privacy policy. For media and API requests, your browser sends e621 only this site's origin as the referrer (for example <code>https://furryreel.com/</code>), not the page path or your search tags, because e621's media servers refuse requests that carry no referrer at all.</p><h2>Cookies and local storage</h2><p>This site does not intentionally set tracking cookies or store saved posts in HTTP cookies. Browser or infrastructure-level technical storage may still occur (for example cache, session, and security functions outside this app logic).</p><p>To avoid asking e621 for the same content twice, recently loaded e621 results and tag suggestions are kept in your browser's session storage for the current tab (cleared when the tab closes, and not used after one hour). Your settings (<code>fr_settings_v1</code>), a request-timing value that lets open tabs share e621's rate limit, and any posts you bookmark in your Saved library (<code>fr_saved_v1</code>) are kept strictly in your browser's local storage on your device. Because local storage is never attached to HTTP requests, none of this is sent to the site operator. You can export or clear your saved posts at any time from <a href="/saved" data-page-nav>Saved</a> or <a href="/settings" data-page-nav>Settings</a>.</p><h2>Legal bases and regional rights</h2><p>Where applicable law requires it, processing is limited to legitimate interests in delivering requested content and maintaining basic security/reliability. Depending on your jurisdiction (for example EEA/UK/California), you may have rights to access, deletion, correction, objection, portability, and non-discrimination. Because this site is designed to minimize first-party personal data, fulfillment may be limited to data actually controlled by this site.</p><h2>Children</h2><p>This site is not directed to children and is intended for audiences legally permitted to view the underlying content in their jurisdiction.</p><h2>Policy updates</h2><p>This policy may be updated from time to time. Material changes will be reflected by updating the effective date on this page.</p><h2>Important legal notice</h2><p>This page is a general transparency notice, not legal advice, and cannot guarantee immunity from legal claims. For formal compliance tailored to your business, consult a licensed attorney.</p><h2>Open source transparency</h2><p>The code is open source for inspection and audit on <a href="https://github.com/lo-w-ol/e621reels/" target="_blank" rel="noopener noreferrer">GitHub</a>.</p></div>${renderBottomNav('privacy')}<script>${renderBottomNavScript()}</script></body></html>`;
 }
 
 function buildSeo(url) {

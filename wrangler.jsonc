@@ -4,5 +4,12 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-03-18",
   // Browser modules are imported by src/assets.js as text and served to pages; tests import them as ES modules.
-  "rules": [{ "type": "Text", "globs": ["**/client/*.js"], "fallthrough": true }]
+  "rules": [{ "type": "Text", "globs": ["**/client/*.js"], "fallthrough": true }],
+  "env": {
+    "beta": {
+      "name": "e621reels-beta",
+      "workers_dev": true,
+      "routes": [{ "pattern": "beta.furryreel.com", "custom_domain": true }]
+    }
+  }
 }

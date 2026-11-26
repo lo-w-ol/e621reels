@@ -7,15 +7,29 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
   const form = dialog.querySelector('form');
   const fields = form.elements;
   const closeSuggestions = bindTagAutocomplete(fields.tags);
+  const searchTrigger = document.getElementById('openFeedSearch');
+  const sortTabs = [...document.querySelectorAll('[data-sort-tab]')];
+  const filterBadge = trigger.querySelector('[data-filter-badge]');
   let filters = { ...initial };
 
   function updateTrigger() {
     const count = Number(Boolean(filters.tags)) + Number(Boolean(filters.rating))
       + Number(filters.sort === 'score') + Number(Boolean(filters.ratio));
-    trigger.textContent = count ? 'Filters · ' + count : 'Filters';
+    if (filterBadge) {
+      filterBadge.textContent = count ? String(count) : '';
+      filterBadge.hidden = !count;
+      trigger.setAttribute('aria-label', count ? `Feed filters (${count} active)` : 'Feed filters');
+    } else {
+      trigger.textContent = count ? 'Filters · ' + count : 'Filters';
+    }
+    for (const tab of sortTabs) {
+      const isActive = tab.getAttribute('data-sort-tab') === (filters.sort === 'score' ? 'score' : 'trending');
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-pressed', String(isActive));
+    }
   }
 
-  function open(source = trigger) {
+  function open(source = trigger, { focusTags = false } = {}) {
     if (dialog.open) return;
     fields.tags.value = filters.tags;
     fields.rating.value = filters.rating;
@@ -23,9 +37,13 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     fields.ratio.value = filters.ratio;
     dialog.showModal();
     onVisibilityChange(true);
+    if (focusTags) {
+      fields.tags.focus({ preventScroll: true });
+      fields.tags.select();
+    }
     dialog.addEventListener('close', () => {
       closeSuggestions();
-      (source.isConnected && !source.closest('[hidden]') ? source : trigger).focus({ preventScroll: true });
+      (source && source.isConnected && !source.closest('[hidden]') ? source : trigger).focus({ preventScroll: true });
       onVisibilityChange(false);
     }, { once: true });
   }
@@ -50,7 +68,16 @@ export function bindFeedFilters({ initial, loadSettings, onApply, onVisibilityCh
     onApply(filters, options);
   }
 
-  trigger.addEventListener('click', () => open());
+  trigger.addEventListener('click', () => open(trigger));
+  if (searchTrigger) {
+    searchTrigger.addEventListener('click', () => open(searchTrigger, { focusTags: true }));
+  }
+  for (const tab of sortTabs) {
+    tab.addEventListener('click', () => {
+      const sort = tab.getAttribute('data-sort-tab') === 'score' ? 'score' : 'trending';
+      apply({ sort });
+    });
+  }
   dialog.querySelector('[data-close-filters]').addEventListener('click', () => dialog.close());
   form.addEventListener('submit', event => {
     event.preventDefault();

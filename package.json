@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:beta": "wrangler deploy --env beta",
     "check": "wrangler deploy --dry-run",
+    "check:beta": "wrangler deploy --env beta --dry-run",
     "test": "node --test"
   },
   "devDependencies": {
